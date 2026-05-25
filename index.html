@@ -1,0 +1,2619 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Hommlet — Scénario de test</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600&family=Cinzel+Decorative:wght@400&family=Crimson+Pro:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;600&display=swap');
+:root{--bg:#0f0d09;--mid:#1a1610;--lt:#241f17;--cd:#1e1912;--go:#c9952a;--gp:#e8d090;--ink:#f0ead8;--dim:#b8a878;--ft:#7a6840;--re:#9b2318;--rl:#c8392b;--gr:#2a6b3a;--gl:#3d9954;--br:#3a3020;--pn:#7a4f0a;--pl:#c8820a;--blu:#1a5a9a;--bll:#2d7abf;}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+html,body{height:100%;overflow:hidden;background:var(--bg);}
+body{font-family:'Crimson Pro',serif;color:var(--ink);}
+#app{display:flex;flex-direction:column;height:100vh;overflow:hidden;}
+.scr{display:none;flex-direction:column;overflow:hidden;flex:1;}
+.scr.on{display:flex;}
+.hdr{background:var(--cd);border-bottom:2px solid var(--go);padding:10px 14px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+.ht{font-family:'Cinzel Decorative',cursive;font-size:clamp(10px,3.5vw,16px);color:var(--go);line-height:1.2;}
+.hs{font-family:'Cinzel',serif;font-size:7px;letter-spacing:2px;color:var(--dim);text-transform:uppercase;}
+.hbdg{font-family:'Cinzel',serif;font-size:8px;letter-spacing:2px;color:var(--rl);border:1px solid var(--rl);padding:2px 7px;white-space:nowrap;}
+
+/* COMBAT DRAWER — slide-in panel for combat info on mobile */
+#combatDrawer{position:fixed;top:0;right:-100%;width:88%;max-width:380px;height:100vh;background:var(--mid);border-left:2px solid var(--rl);z-index:150;transition:right 0.25s ease;overflow-y:auto;display:flex;flex-direction:column;-webkit-overflow-scrolling:touch;}
+#combatDrawer.open{right:0;box-shadow:-4px 0 12px rgba(0,0,0,0.5);}
+.drawer-header{padding:10px 14px;background:var(--cd);border-bottom:2px solid var(--rl);display:flex;justify-content:space-between;align-items:center;flex-shrink:0;}
+.drawer-title{font-family:'Cinzel Decorative',cursive;font-size:14px;color:#ff9050;}
+.drawer-close{font-family:'Cinzel',serif;font-size:10px;letter-spacing:1px;padding:5px 10px;background:transparent;border:1px solid var(--ft);color:var(--ft);cursor:pointer;border-radius:2px;}
+.drawer-body{flex:1;overflow-y:auto;padding:12px;}
+.drawer-section{margin-bottom:14px;}
+.drawer-section-title{font-family:'Cinzel',serif;font-size:8px;letter-spacing:2px;color:#ff9050;text-transform:uppercase;margin-bottom:6px;border-bottom:1px solid var(--br);padding-bottom:3px;}
+#drawerBackdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:149;}
+#drawerBackdrop.on{display:block;}
+
+/* Combat toggle button in header (hidden when not in combat) */
+.hcombat{display:none;font-family:'Cinzel',serif;font-size:9px;letter-spacing:1px;text-transform:uppercase;padding:5px 9px;background:rgba(155,35,24,.2);border:1px solid var(--rl);color:#ff9050;cursor:pointer;border-radius:2px;margin-left:6px;font-weight:600;animation:pulseBtn 1.8s infinite;}
+.hcombat.on{display:inline-block;}
+@keyframes pulseBtn{0%,100%{box-shadow:0 0 0 0 rgba(200,57,43,.4);}50%{box-shadow:0 0 0 5px rgba(200,57,43,0);}}
+
+/* API KEY */
+#apikey{flex:1;padding:20px;overflow-y:auto;}
+.ak-t{font-family:'Cinzel Decorative',cursive;font-size:16px;color:var(--go);text-align:center;margin-bottom:6px;}
+.ak-s{font-family:'Cinzel',serif;font-size:8px;letter-spacing:2px;color:var(--dim);text-align:center;text-transform:uppercase;margin-bottom:12px;}
+.ak-info{font-size:12px;color:var(--dim);line-height:1.6;border:1px solid var(--br);padding:11px;background:rgba(255,255,255,.02);margin-bottom:14px;}
+.ak-row{display:flex;gap:7px;}
+.ak-inp{flex:1;font-family:'Crimson Pro',serif;font-size:13px;padding:9px 10px;background:var(--lt);border:1px solid var(--br);color:var(--ink);outline:none;-webkit-appearance:none;}
+.ak-inp:focus{border-color:var(--go);}
+.ak-btn{font-family:'Cinzel',serif;font-size:9px;letter-spacing:2px;text-transform:uppercase;padding:9px 14px;background:var(--gr);border:2px solid var(--gl);color:#fff;cursor:pointer;white-space:nowrap;}
+.ak-err{font-family:'Cinzel',serif;font-size:9px;color:var(--rl);text-align:center;margin-top:7px;min-height:14px;}
+
+/* SELECT */
+#sel{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px;}
+.selt{font-family:'Cinzel Decorative',cursive;font-size:17px;color:var(--go);text-align:center;margin-bottom:4px;}
+.sels{font-family:'Cinzel',serif;font-size:8px;letter-spacing:2px;color:var(--dim);text-align:center;text-transform:uppercase;margin-bottom:10px;}
+.seli{font-size:12px;font-style:italic;color:var(--dim);line-height:1.6;border:1px solid var(--br);padding:10px;background:rgba(255,255,255,.02);margin-bottom:14px;}
+.cgrid{display:grid;grid-template-columns:1fr 1fr;gap:9px;}
+.resume-label{font-family:'Cinzel',serif;font-size:8px;letter-spacing:3px;color:var(--gp);text-transform:uppercase;margin-bottom:5px;text-align:center;}
+.resume-section{display:flex;flex-direction:column;gap:6px;margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--br);}
+.model-picker{margin:0 0 14px;padding:9px;background:rgba(201,149,42,.05);border:1px solid var(--br);}
+.model-picker-label{font-family:'Cinzel',serif;font-size:7px;letter-spacing:3px;color:var(--ft);text-transform:uppercase;margin-bottom:6px;text-align:center;}
+.model-picker-row{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
+.model-btn{font-family:'Cinzel',serif;font-size:10px;letter-spacing:1px;text-transform:uppercase;padding:8px 6px;background:var(--lt);border:1px solid var(--br);color:var(--dim);cursor:pointer;display:flex;flex-direction:column;gap:2px;align-items:center;font-weight:600;}
+.model-btn.active{background:rgba(42,107,58,.25);border-color:var(--gl);color:#80e090;}
+.model-price{font-size:8px;color:var(--ft);letter-spacing:0;font-weight:400;text-transform:none;}
+.model-btn.active .model-price{color:#80e090;}
+.resume-item{background:rgba(42,107,58,.1);border:1px solid var(--gl);padding:9px 11px;cursor:pointer;transition:background .15s;}
+.resume-item:active,.resume-item:hover{background:rgba(42,107,58,.2);}
+.resume-name{font-family:'Cinzel',serif;font-size:11px;color:#80e090;font-weight:600;}
+.resume-meta{font-family:'Cinzel',serif;font-size:8px;color:var(--ft);letter-spacing:1px;margin-top:2px;}
+.cc{background:var(--cd);border:2px solid var(--br);padding:11px;cursor:pointer;position:relative;}
+.cc.sel{border-color:var(--gl);background:rgba(42,107,58,.12);}
+.ccn{font-family:'Cinzel Decorative',cursive;font-size:11px;color:var(--go);margin-bottom:2px;}
+.ccs{font-family:'Cinzel',serif;font-size:7px;letter-spacing:2px;color:var(--rl);text-transform:uppercase;margin-bottom:6px;}
+.ckg{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;margin-bottom:6px;}
+.ck{background:var(--lt);border:1px solid var(--br);padding:3px;text-align:center;}
+.ckl{font-family:'Cinzel',serif;font-size:6px;color:var(--ft);display:block;}
+.ckv{font-size:12px;color:var(--ink);font-weight:600;}
+.cfl{font-size:10px;color:var(--dim);line-height:1.6;}
+.cfl li{list-style:none;padding-left:8px;position:relative;}
+.cfl li::before{content:"·";position:absolute;left:0;color:var(--go);}
+.cbdg{position:absolute;top:7px;right:7px;font-family:'Cinzel',serif;font-size:7px;padding:2px 5px;border-radius:2px;}
+.bG{background:rgba(155,35,24,.2);border:1px solid var(--rl);color:#ff8070;}
+.bC{background:rgba(201,149,42,.15);border:1px solid var(--go);color:var(--gp);}
+.bR{background:rgba(26,90,154,.2);border:1px solid var(--bll);color:#7abfff;}
+.bM{background:rgba(100,42,154,.2);border:1px solid #9060dd;color:#c090ff;}
+.stbtn{font-family:'Cinzel',serif;font-size:11px;letter-spacing:2px;text-transform:uppercase;padding:14px;background:var(--gr);border:2px solid var(--gl);color:#fff;cursor:pointer;width:100%;margin-top:14px;font-weight:600;}
+.stbtn:disabled{opacity:.3;}
+
+/* GAME */
+#game{flex:1;display:none;flex-direction:column;overflow:hidden;}
+#game.on{display:flex;}
+
+/* ROLL BANNER */
+#rbnr{display:none;background:var(--pn);border-bottom:1px solid var(--pl);padding:6px 12px;align-items:center;justify-content:space-between;flex-shrink:0;animation:pB 1.5s infinite;}
+#rbnr.on{display:flex;}
+@keyframes pB{0%,100%{border-color:var(--pl);}50%{border-color:#ffaa30;}}
+.rb1{font-family:'Cinzel',serif;font-size:8px;letter-spacing:2px;color:#ffcc70;text-transform:uppercase;}
+.rb2{font-size:11px;color:#ffe090;font-weight:600;line-height:1.2;}
+.atg{font-family:'Cinzel',serif;font-size:7px;padding:2px 5px;border-radius:2px;color:#fff;}
+.an{background:#445;}.aa{background:var(--gr);}.ad{background:var(--re);}
+@media(max-width:600px){
+  #rbnr{padding:4px 10px;}
+  .rb1{font-size:7px;}
+  .rb2{font-size:10px;}
+  .atg{font-size:6px;padding:1px 4px;}
+}
+
+/* COMBAT TRACKER — collapsible (now hidden on mobile, available in drawer) */
+#cbar{display:none;background:rgba(155,35,24,.18);border-bottom:2px solid var(--rl);padding:5px 12px;flex-shrink:0;flex-direction:column;gap:4px;}
+#cbar.on{display:flex;}
+@media(max-width:600px){#cbar.on{display:none;}}
+.cbar-top{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;cursor:pointer;}
+.cbar-toggle{font-family:'Cinzel',serif;font-size:8px;color:#ff9050;background:transparent;border:1px solid var(--rl);padding:2px 6px;border-radius:2px;cursor:pointer;}
+.cbar-content{display:none;flex-direction:column;gap:4px;}
+.cbar-content.on{display:flex;}
+.cbar-lbl{font-family:'Cinzel',serif;font-size:9px;letter-spacing:2px;color:#ff9050;text-transform:uppercase;font-weight:600;}
+.cbar-round{font-family:'Cinzel',serif;font-size:9px;color:var(--gp);}
+.cbar-turns{display:flex;gap:4px;overflow-x:auto;padding:2px 0;}
+.turn-item{flex-shrink:0;font-family:'Cinzel',serif;font-size:8px;padding:4px 7px;border:1px solid var(--br);background:var(--lt);color:var(--dim);white-space:nowrap;border-radius:2px;}
+.turn-item.active{background:var(--pn);border-color:var(--pl);color:#fff;font-weight:600;box-shadow:0 0 0 1px var(--pl);}
+.turn-item.player{border-color:var(--gl);color:#80e090;}
+.turn-item.player.active{background:var(--gr);color:#fff;}
+.turn-item.dead{opacity:.35;text-decoration:line-through;}
+.turn-item.downed{opacity:.55;font-style:italic;}
+
+/* BATTLE MAP — collapsible (hidden on mobile, available in drawer) */
+#bmap{display:none;background:var(--cd);border-bottom:1px solid var(--br);padding:5px 12px;flex-shrink:0;flex-direction:column;gap:3px;}
+#bmap.on{display:flex;}
+@media(max-width:600px){#bmap.on{display:none;}}
+.bmap-header{display:flex;align-items:center;justify-content:space-between;cursor:pointer;}
+.bmap-lbl{font-family:'Cinzel',serif;font-size:8px;letter-spacing:2px;color:var(--ft);text-transform:uppercase;}
+.bmap-content{display:none;flex-direction:column;gap:3px;}
+.bmap-content.on{display:flex;}
+.bmap-grid{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--gp);background:var(--bg);padding:6px;border:1px solid var(--br);line-height:1.2;white-space:pre;overflow-x:auto;letter-spacing:1px;}
+.bmap-legend{font-family:'Cinzel',serif;font-size:8px;color:var(--ft);display:flex;gap:8px;flex-wrap:wrap;}
+
+/* TURN INDICATOR */
+.turn-ind{display:none;font-family:'Cinzel',serif;font-size:9px;letter-spacing:2px;text-align:center;padding:5px;font-weight:600;text-transform:uppercase;flex-shrink:0;}
+.turn-ind.on{display:block;}
+.turn-ind.mine{background:var(--gr);color:#fff;}
+.turn-ind.foe{background:var(--re);color:#fff;}
+
+/* LOG */
+.lw{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+.ll{font-family:'Cinzel',serif;font-size:7px;letter-spacing:3px;text-transform:uppercase;color:var(--ft);padding:5px 12px;border-bottom:1px solid var(--br);background:var(--cd);flex-shrink:0;}
+.log{flex:1;overflow-y:auto;padding:11px;scroll-behavior:smooth;-webkit-overflow-scrolling:touch;min-height:240px;}
+@media(max-width:600px){
+  .log{min-height:280px;font-size:14px;line-height:1.55;padding:9px;}
+  /* Compact the header on mobile too */
+  .hdr{padding:7px 10px;}
+  .ht{font-size:11px;}
+  .hs{display:none;}
+  .hbdg{font-size:7px;padding:1px 5px;}
+  .hbtn{padding:4px 7px;font-size:8px;margin-left:3px;}
+  .hcombat{padding:4px 8px;font-size:8px;margin-left:3px;}
+  /* The chronique label takes space, hide on mobile */
+  .ll{display:none;}
+}
+.msg{margin-bottom:11px;line-height:1.7;animation:fU .3s ease;}
+@keyframes fU{from{opacity:0;transform:translateY(3px);}to{opacity:1;transform:translateY(0);}}
+.dm{font-size:13px;color:var(--ink);}
+.dm .l{font-family:'Cinzel',serif;font-size:7px;letter-spacing:3px;text-transform:uppercase;color:var(--rl);display:block;margin-bottom:3px;}
+.pl{font-size:12px;font-style:italic;color:var(--gp);padding-left:9px;border-left:2px solid var(--go);}
+.pl .l{font-family:'Cinzel',serif;font-size:7px;letter-spacing:3px;color:var(--go);display:block;margin-bottom:2px;font-style:normal;}
+.roll{font-family:'Cinzel',serif;font-size:11px;padding:5px 10px;background:rgba(201,149,42,.1);border:1px solid rgba(201,149,42,.3);color:var(--gp);margin:2px 0;}
+.roll.ok{background:rgba(42,107,58,.15);border-color:rgba(61,153,84,.4);color:#80e090;}
+.roll.fail{background:rgba(155,35,24,.15);border-color:rgba(200,57,43,.4);color:#ff8070;}
+.roll.crit{background:rgba(200,200,0,.15);border-color:rgba(220,220,0,.5);color:#ffff70;}
+.roll.fmbl{background:rgba(200,0,200,.12);border-color:rgba(200,0,200,.4);color:#ff80ff;}
+.sys{font-family:'Cinzel',serif;font-size:8px;text-align:center;color:var(--ft);padding:4px 0;border-top:1px dashed var(--br);border-bottom:1px dashed var(--br);margin:6px 0;letter-spacing:2px;}
+.cbt{font-family:'Cinzel',serif;font-size:10px;color:#ff9050;background:rgba(200,57,43,.1);border:1px solid rgba(200,57,43,.25);padding:5px 9px;}
+
+/* SHEET BTN */
+.sheetbtn{flex-shrink:0;font-family:'Cinzel',serif;font-size:10px;letter-spacing:2px;text-transform:uppercase;padding:8px;background:var(--lt);border:none;border-top:1px solid var(--br);border-bottom:1px solid var(--br);color:var(--go);cursor:pointer;text-align:center;width:100%;font-weight:600;}
+.sheetbtn:active{background:var(--br);}
+@media(max-width:600px){
+  .sheetbtn{font-size:9px;padding:6px;letter-spacing:1px;}
+  #dbgPanel{font-size:7px!important;padding:2px 6px!important;}
+  #manualNextBtn{font-size:10px!important;padding:8px!important;}
+}
+
+/* MODAL */
+#smodal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.94);z-index:200;overflow-y:auto;padding:14px;-webkit-overflow-scrolling:touch;}
+#smodal.on{display:block;}
+.smi{background:var(--cd);padding:14px;max-width:420px;margin:0 auto;}
+.smcl{font-family:'Cinzel',serif;font-size:10px;letter-spacing:2px;text-transform:uppercase;padding:11px;background:var(--re);border:1px solid var(--rl);color:#fff;cursor:pointer;width:100%;margin-top:10px;font-weight:600;}
+.pt{font-family:'Cinzel',serif;font-size:6px;letter-spacing:3px;text-transform:uppercase;color:var(--ft);border-bottom:1px solid var(--br);padding-bottom:2px;margin-bottom:4px;margin-top:8px;}
+.pn2{font-family:'Cinzel Decorative',cursive;font-size:13px;color:var(--go);text-align:center;}
+.ps2{font-size:10px;font-style:italic;color:var(--dim);text-align:center;margin-bottom:4px;}
+.bgh{font-size:10px;color:var(--gp);text-align:center;font-style:italic;}
+.sg{display:grid;grid-template-columns:1fr 1fr;gap:2px;}
+.sb{background:var(--lt);border:1px solid var(--br);padding:3px;text-align:center;}
+.sl2{font-family:'Cinzel',serif;font-size:6px;color:var(--ft);display:block;}
+.sv2{font-size:14px;color:var(--ink);font-weight:600;}
+.sm2{font-size:9px;color:var(--dim);}
+.hrow{display:flex;justify-content:space-between;align-items:baseline;}
+.hl2{font-family:'Cinzel',serif;font-size:8px;color:var(--ft);}
+.hv2{font-family:'Cinzel',serif;font-size:12px;color:var(--rl);}
+.hbg{height:6px;background:var(--lt);border:1px solid var(--br);overflow:hidden;margin-top:2px;}
+.hf{height:100%;transition:width .5s,background .5s;}
+.tri2{display:grid;grid-template-columns:1fr 1fr 1fr;gap:2px;text-align:center;margin-top:3px;}
+.tri2 div{background:var(--lt);border:1px solid var(--br);padding:3px;}
+.tl2{font-family:'Cinzel',serif;font-size:6px;color:var(--ft);display:block;}
+.tv2{font-size:14px;color:var(--ink);}
+.cds{display:flex;flex-wrap:wrap;gap:2px;}
+.ctg{font-family:'Cinzel',serif;font-size:7px;padding:2px 5px;background:rgba(200,57,43,.2);border:1px solid var(--rl);color:#ff8070;border-radius:2px;}
+.sklist{font-size:10px;color:var(--dim);line-height:1.8;}
+.sklist li{list-style:none;padding-left:9px;position:relative;}
+.sklist li::before{content:"o";position:absolute;left:0;font-size:6px;top:5px;color:var(--gl);}
+.ivlist{font-size:10px;color:var(--dim);line-height:1.8;}
+.ivlist li{list-style:none;padding-left:9px;position:relative;}
+.ivlist li::before{content:">";position:absolute;left:0;color:var(--go);}
+.fts{font-size:10px;color:var(--dim);line-height:1.6;}
+.srow{display:flex;gap:3px;flex-wrap:wrap;align-items:center;margin-bottom:3px;}
+.spip{width:15px;height:15px;border-radius:50%;border:1px solid var(--go);background:var(--go);flex-shrink:0;}
+.spip.used{background:transparent;border-color:var(--ft);}
+
+/* DICE */
+.dp{border-top:1px solid var(--br);padding:7px 12px;background:var(--cd);flex-shrink:0;}
+.dinfo{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:5px;}
+.dctx{font-size:11px;color:var(--pl);}
+.dml{font-size:10px;color:var(--ft);}
+.drow{display:flex;flex-wrap:wrap;gap:4px;}
+.db{font-family:'Cinzel',serif;font-size:11px;font-weight:600;padding:7px 10px;background:rgba(201,149,42,.1);border:1px solid var(--go);color:var(--go);cursor:pointer;min-width:44px;text-align:center;}
+.db:disabled{opacity:.15;cursor:not-allowed;border-color:var(--ft);color:var(--ft);background:transparent;}
+.db.req{opacity:1!important;border-color:var(--pl)!important;color:var(--pl)!important;background:rgba(200,130,10,.15)!important;animation:pD 1.2s infinite;}
+@keyframes pD{0%,100%{box-shadow:0 0 0 0 rgba(200,130,10,.4);}50%{box-shadow:0 0 0 6px rgba(200,130,10,0);}}
+.rres{font-family:'Cinzel',serif;font-size:20px;font-weight:700;color:var(--go);min-width:42px;text-align:center;}
+.mdis{font-family:'Cinzel',serif;font-size:12px;color:var(--gp);min-width:44px;text-align:center;}
+@media(max-width:600px){
+  .dp{padding:5px 10px;}
+  .db{font-size:10px;padding:6px 8px;min-width:38px;}
+  .rres{font-size:17px;min-width:34px;}
+  .mdis{font-size:11px;}
+  .dinfo{margin-bottom:4px;}
+}
+
+/* INPUT */
+.ia{border-top:1px solid var(--br);padding:7px 12px;background:var(--cd);flex-shrink:0;}
+.blk{display:none;font-family:'Cinzel',serif;font-size:9px;letter-spacing:2px;text-align:center;color:var(--pl);padding:5px;background:rgba(122,79,10,.15);border:1px solid var(--pl);margin-bottom:5px;font-weight:600;}
+.blk.on{display:block;}
+.qrow{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px;}
+.qb{font-family:'Cinzel',serif;font-size:9px;letter-spacing:1px;text-transform:uppercase;padding:6px 9px;background:var(--lt);border:1px solid var(--br);color:var(--gp);cursor:pointer;font-weight:600;}
+.qb:active:not(:disabled){background:var(--gr);color:#fff;border-color:var(--gl);}
+.qb:disabled{opacity:.3;}
+@media(max-width:600px){
+  .ia{padding:5px 10px;}
+  .qrow{margin-bottom:5px;gap:3px;}
+  .qb{font-size:8px;padding:5px 7px;}
+}
+
+/* SPINNER */
+.spin-row{display:none;align-items:center;justify-content:center;gap:10px;padding:8px;margin-bottom:5px;}
+.spin-row.on{display:flex;}
+.spin{width:20px;height:20px;border:2px solid var(--br);border-top-color:var(--go);border-radius:50%;animation:spin 0.8s linear infinite;flex-shrink:0;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.spin-txt{font-family:'Cinzel',serif;font-size:10px;letter-spacing:2px;color:var(--gp);text-transform:uppercase;}
+
+.irow{display:flex;gap:7px;align-items:flex-end;}
+textarea{flex:1;font-family:'Crimson Pro',serif;font-size:14px;padding:9px 11px;background:var(--lt);border:1px solid var(--br);color:var(--ink);resize:none;min-height:46px;max-height:90px;outline:none;-webkit-appearance:none;}
+textarea:focus{border-color:var(--go);}
+textarea:disabled{opacity:.35;}
+textarea::placeholder{color:var(--ft);font-style:italic;}
+.snd{font-family:'Cinzel',serif;font-size:10px;letter-spacing:2px;text-transform:uppercase;padding:9px 14px;background:var(--gr);border:2px solid var(--gl);color:#fff;cursor:pointer;align-self:stretch;min-width:62px;font-weight:600;}
+.snd:disabled{opacity:.35;}
+
+/* SAVE BAR */
+/* SAVE BUTTON IN HEADER */
+.hbtn{font-family:'Cinzel',serif;font-size:9px;letter-spacing:1px;text-transform:uppercase;padding:5px 9px;background:transparent;border:1px solid var(--br);color:var(--go);cursor:pointer;border-radius:2px;margin-left:6px;}
+.hbtn:active,.hbtn:hover{background:var(--gr);color:#fff;border-color:var(--gl);}
+.hgroup{display:flex;align-items:center;gap:5px;}
+
+/* SAVE MODAL */
+#savemodal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:200;overflow-y:auto;padding:14px;-webkit-overflow-scrolling:touch;}
+#savemodal.on{display:block;}
+.svmi{background:var(--cd);padding:14px;max-width:420px;margin:0 auto;}
+.svmt{font-family:'Cinzel Decorative',cursive;font-size:14px;color:var(--go);text-align:center;margin-bottom:10px;}
+.svmlist{display:flex;flex-direction:column;gap:8px;}
+.svmslot{border:1px solid var(--br);background:var(--lt);padding:10px;display:flex;flex-direction:column;gap:5px;}
+.svmsname{font-family:'Cinzel',serif;font-size:11px;color:var(--go);}
+.svmsmeta{font-family:'Cinzel',serif;font-size:8px;color:var(--ft);letter-spacing:1px;}
+.svmsem{font-size:11px;font-style:italic;color:var(--ft);text-align:center;padding:6px 0;}
+.svmsbtns{display:flex;gap:5px;margin-top:3px;}
+.svmsb{font-family:'Cinzel',serif;font-size:8px;letter-spacing:1px;text-transform:uppercase;padding:6px 8px;border:1px solid var(--br);background:transparent;color:var(--ft);cursor:pointer;flex:1;}
+.svmsb.svmsb-save{border-color:var(--gl);color:#80e090;}
+.svmsb.svmsb-load{border-color:var(--bll);color:#7abfff;}
+.svmsb.svmsb-del{border-color:var(--rl);color:#ff8070;}
+.svmsb:active{opacity:.7;}
+.svmsb:disabled{opacity:.3;cursor:not-allowed;}
+/* OLD SAVE BAR — hidden now */
+.svb{display:none;}
+.svl{font-family:'Cinzel',serif;font-size:7px;letter-spacing:2px;text-transform:uppercase;color:var(--ft);white-space:nowrap;}
+.svs{display:flex;gap:4px;flex:1;}
+.ss{flex:1;border:1px solid var(--br);background:var(--lt);padding:3px 5px;display:flex;flex-direction:column;gap:1px;}
+.ssn{font-family:'Cinzel',serif;font-size:6px;letter-spacing:2px;color:var(--ft);}
+.ssnm{font-family:'Cinzel',serif;font-size:8px;color:var(--go);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:11px;}
+.ssem{font-size:8px;font-style:italic;color:var(--ft);opacity:.5;}
+.sbt{display:flex;gap:2px;margin-top:2px;}
+.slb{font-family:'Cinzel',serif;font-size:6px;text-transform:uppercase;padding:2px 3px;border:1px solid var(--br);background:transparent;color:var(--ft);cursor:pointer;flex:1;}
+.slb:disabled{opacity:.28;}
+
+.tst{position:fixed;bottom:16px;left:50%;transform:translateX(-50%) translateY(10px);background:var(--gr);color:#fff;font-family:'Cinzel',serif;font-size:9px;letter-spacing:2px;text-transform:uppercase;padding:8px 15px;border:1px solid var(--gl);opacity:0;transition:opacity .3s,transform .3s;pointer-events:none;z-index:999;white-space:nowrap;}
+.tst.on{opacity:1;transform:translateX(-50%) translateY(0);}
+.tst.err{background:var(--re);border-color:var(--rl);}
+</style>
+</head>
+<body>
+<div id="app">
+
+<div id="apiscreen" class="scr">
+  <div class="hdr">
+    <div><div class="ht">Hommlet — Scénario de test</div><div class="hs">Configuration</div></div>
+  </div>
+  <div id="apikey">
+    <div class="ak-t">Clé API Anthropic</div>
+    <div class="ak-s">Requise en local uniquement</div>
+    <div class="ak-info">Obtenez une clé sur <strong>console.anthropic.com</strong> → API Keys → Create Key. Elle commence par <strong>sk-ant-</strong> et sera mémorisée dans votre navigateur.</div>
+    <div class="ak-row"><input class="ak-inp" id="ak" type="password" placeholder="sk-ant-api03-..."><button class="ak-btn" id="akbtn">OK</button></div>
+    <div class="ak-err" id="akerr"></div>
+  </div>
+</div>
+
+<div id="selscreen" class="scr">
+  <div class="hdr">
+    <div><div class="ht">Hommlet — Scénario de test</div><div class="hs">D&amp;D 2024 SRD 5.2 · Règles strictes</div></div>
+    <span class="hbdg">v1.0.0</span>
+  </div>
+  <div id="sel">
+    <div id="resume-label" class="resume-label" style="display:none">Reprendre une partie</div>
+    <div id="resume-section" class="resume-section" style="display:none"></div>
+    <div class="selt">Nouvelle partie</div>
+    <div class="sels">Hommlet, Greyhawk · Niveau 1 · D&amp;D 2024</div>
+    <div class="seli"><strong>Scénario de test</strong> en 3 actes à Hommlet : recrutement d'un compagnon à l'auberge, obstacle sur la route (ravin), puis embuscade de bandits. Règles D&amp;D 2024 strictes — backgrounds, maîtrises d'armes, emplacements de sorts, combat à l'initiative. Mort permanente.</div>
+    <div class="model-picker">
+      <div class="model-picker-label">MJ utilisé pour ce test</div>
+      <div class="model-picker-row">
+        <button class="model-btn" id="mdl-sonnet" onclick="selectModel('sonnet')">Sonnet 4.6<span class="model-price">$3 / $15 /M</span></button>
+        <button class="model-btn" id="mdl-haiku" onclick="selectModel('haiku')">Haiku 4.5<span class="model-price">$1 / $5 /M</span></button>
+      </div>
+    </div>
+    <div class="cgrid" id="cgrid"></div>
+    <button class="stbtn" id="stbtn" disabled onclick="startGame()">⚔ Partir à l'aventure</button>
+  </div>
+</div>
+
+<div id="game">
+  <div class="hdr">
+    <div><div class="ht">Hommlet — Test</div><div class="hs">D&amp;D 2024 · Combat strict</div></div>
+    <div class="hgroup">
+      <button class="hcombat" id="hCombatBtn" onclick="toggleDrawer()">⚔ Combat</button>
+      <span class="hbdg" id="hbhp">— PV</span>
+      <button class="hbtn" id="tokCounter" onclick="openTokenDetail()" title="Tokens consommés" style="font-size:8px">🪙 0</button>
+      <button class="hbtn" onclick="openSaveMenu()" title="Sauvegardes">💾</button>
+      <button class="hbtn" onclick="abandonGame()" title="Retour à l'accueil" style="border-color:var(--rl);color:#ff8070">⏏</button>
+    </div>
+  </div>
+  <div id="rbnr">
+    <div><div class="rb1">⚠ Jet requis</div><div class="rb2" id="bdet">—</div></div>
+    <span class="atg an" id="badv">Normal</span>
+  </div>
+  <div id="cbar">
+    <div class="cbar-top" onclick="toggleCbar()">
+      <span class="cbar-lbl">⚔ COMBAT</span>
+      <span class="cbar-round" id="cbround">Round 1</span>
+      <span class="cbar-toggle" id="cbar-toggle-btn">Tracker ▼</span>
+    </div>
+    <div class="cbar-content on" id="cbar-content">
+      <div class="cbar-turns" id="cbturns"></div>
+    </div>
+  </div>
+  <div id="bmap">
+    <div class="bmap-header" onclick="toggleBmap()">
+      <span class="bmap-lbl">Carte tactique</span>
+      <span class="cbar-toggle" id="bmap-toggle-btn">Carte ▼</span>
+    </div>
+    <div class="bmap-content on" id="bmap-content">
+      <pre class="bmap-grid" id="bmgrid"></pre>
+      <div class="bmap-legend" id="bmleg"></div>
+    </div>
+  </div>
+  <div class="turn-ind" id="tind"></div>
+  <div class="lw">
+    <div class="ll">Chronique</div>
+    <div class="log" id="log"></div>
+  </div>
+  <button class="sheetbtn" onclick="openSheet()">📋 Fiche · Inventaire · Sorts · Capacités</button>
+  <button id="manualNextBtn" style="display:none;flex-shrink:0;font-family:'Cinzel',serif;font-size:11px;letter-spacing:2px;text-transform:uppercase;padding:11px;background:var(--pn);border:none;border-top:1px solid var(--pl);border-bottom:1px solid var(--pl);color:#fff;cursor:pointer;width:100%;font-weight:600;">▶ Jouer le tour</button>
+  <div id="dbgPanel" style="background:#0a0907;border-top:1px solid var(--rl);padding:3px 8px;font-family:'JetBrains Mono',monospace;font-size:8px;color:#ff8070;display:flex;flex-wrap:wrap;gap:6px;flex-shrink:0;">
+    <span><span id="dbgState">—</span></span>
+    <span>· Tour: <span id="dbgTurn">—</span></span>
+    <span>· Input: <span id="dbgInput">—</span></span>
+    <span>· Jet: <span id="dbgRoll">—</span></span>
+  </div>
+  <div class="dp">
+    <div class="dinfo">
+      <div>
+        <div style="font-family:'Cinzel',serif;font-size:7px;letter-spacing:2px;text-transform:uppercase;color:var(--ft)">Dés — <span id="dctx">Aucun jet</span></div>
+        <div class="dml" id="dml"></div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;"><span class="rres" id="rres">—</span><span class="mdis" id="mdis"></span></div>
+    </div>
+    <div class="drow">
+      <button class="db" id="bd4"   onclick="rDie(4)"   disabled>d4</button>
+      <button class="db" id="bd6"   onclick="rDie(6)"   disabled>d6</button>
+      <button class="db" id="bd8"   onclick="rDie(8)"   disabled>d8</button>
+      <button class="db" id="bd10"  onclick="rDie(10)"  disabled>d10</button>
+      <button class="db" id="bd12"  onclick="rDie(12)"  disabled>d12</button>
+      <button class="db" id="bd20"  onclick="rDie(20)"  disabled>d20</button>
+      <button class="db" id="bd100" onclick="rDie(100)" disabled style="min-width:42px">d%</button>
+    </div>
+  </div>
+  <div class="svb" style="display:none"><span class="svl">Sauv.</span><div class="svs" id="svs"></div></div>
+  <div class="ia">
+    <div class="blk" id="blk">⚠ LANCEZ LE DÉ REQUIS AVANT DE CONTINUER</div>
+    <div class="qrow">
+      <button class="qb" id="qb0">👁 Observer</button>
+      <button class="qb" id="qb1">💬 Parler</button>
+      <button class="qb" id="qb2">🔍 Fouiller</button>
+      <button class="qb" id="qb3">⚔ Attaquer</button>
+      <button class="qb" id="qb4">💤 Repos court</button>
+      <button class="qb" id="qb5">📍 Situation</button>
+    </div>
+    <div class="spin-row" id="spin-row"><div class="spin"></div><span class="spin-txt">Le MJ réfléchit...</span></div>
+    <div class="irow">
+      <textarea id="inp" placeholder="Décrivez votre action..." rows="2"></textarea>
+      <button class="snd" id="sbtn">Agir →</button>
+    </div>
+  </div>
+</div>
+
+<div id="drawerBackdrop" onclick="closeDrawer()"></div>
+<div id="combatDrawer">
+  <div class="drawer-header">
+    <span class="drawer-title">⚔ Combat</span>
+    <button class="drawer-close" onclick="closeDrawer()">✕ Fermer</button>
+  </div>
+  <div class="drawer-body">
+    <div class="drawer-section">
+      <div class="drawer-section-title">Initiative · <span id="drawerRound">Round 1</span></div>
+      <div id="drawerTurns" style="display:flex;flex-direction:column;gap:4px"></div>
+    </div>
+    <div class="drawer-section">
+      <div class="drawer-section-title">Carte tactique</div>
+      <pre id="drawerMapGrid" style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--gp);background:var(--bg);padding:8px;border:1px solid var(--br);line-height:1.25;white-space:pre;overflow-x:auto;letter-spacing:1px;margin-bottom:5px;"></pre>
+      <div id="drawerMapLegend" style="font-family:'Cinzel',serif;font-size:9px;color:var(--ft);"></div>
+    </div>
+  </div>
+</div>
+
+<div id="smodal"><div class="smi" id="smi"></div><button class="smcl" onclick="document.getElementById('smodal').style.display='none'">✕ Fermer</button></div>
+<div id="savemodal">
+  <div class="svmi">
+    <div class="svmt">💾 Sauvegardes</div>
+    <div class="svmlist" id="svmlist"></div>
+  </div>
+  <button class="smcl" onclick="document.getElementById('savemodal').classList.remove('on')">✕ Fermer</button>
+</div>
+</div>
+<div class="tst" id="tst"></div>
+
+<script>
+// =============================================
+// ENVIRONMENT
+// =============================================
+var IS_CLAUDE = false;
+try { IS_CLAUDE = typeof window.storage !== "undefined" && window.storage !== null; } catch(e) {}
+var API_KEY = "";
+
+// Available models for testing — switch via the model selector on the home screen
+var MODELS = {
+  "sonnet": { id: "claude-sonnet-4-6",   name: "Sonnet 4.6", priceIn: 3,    priceOut: 15 },
+  "haiku":  { id: "claude-haiku-4-5",     name: "Haiku 4.5",  priceIn: 1,    priceOut: 5  }
+};
+var CURRENT_MODEL = "sonnet";
+try {
+  var saved = localStorage.getItem("n1v8_model");
+  if (saved && MODELS[saved]) CURRENT_MODEL = saved;
+} catch(e) {}
+
+var ST = {
+  set: function(k, v) {
+    if (IS_CLAUDE) return window.storage.set(k, v);
+    try { localStorage.setItem(k, v); return Promise.resolve(true); } catch(e) { return Promise.resolve(false); }
+  },
+  get: function(k) {
+    if (IS_CLAUDE) return window.storage.get(k).catch(function(){return null;});
+    try { var v = localStorage.getItem(k); return Promise.resolve(v ? {value:v} : null); } catch(e) { return Promise.resolve(null); }
+  },
+  del: function(k) {
+    if (IS_CLAUDE) return window.storage.delete(k).catch(function(){return null;});
+    try { localStorage.removeItem(k); return Promise.resolve(true); } catch(e) { return Promise.resolve(false); }
+  }
+};
+
+function showScreen(id) {
+  document.querySelectorAll(".scr").forEach(function(s){s.classList.remove("on");});
+  var el = document.getElementById(id);
+  if (el) el.classList.add("on");
+}
+
+function init() {
+  if (IS_CLAUDE) {
+    showScreen("selscreen");
+  } else {
+    var saved = null;
+    try { saved = localStorage.getItem("n1v8_key"); } catch(e) {}
+    if (saved && saved.indexOf("sk-") === 0) { API_KEY = saved; showScreen("selscreen"); }
+    else { showScreen("apiscreen"); }
+  }
+  initCards();
+  lockAllDice();
+  renderSaveSlots();
+  renderResumeSection();
+  applyModelSelection();
+  // Auto-restore only if a recent autosave exists AND looks like an interrupted session
+  // (the user can also explicitly click "Reprendre" from the home screen)
+  var autoSaved = null;
+  try { autoSaved = localStorage.getItem(AUTOSAVE_KEY); } catch(e) {}
+  if (autoSaved) {
+    try {
+      var d = JSON.parse(autoSaved);
+      // Restore if saved within last 24h
+      if (d && d.ts && (Date.now() - d.ts) < 86400000) {
+        tryAutoRestore();
+      }
+    } catch(e) {}
+  }
+}
+
+function selectModel(key) {
+  if (!MODELS[key]) return;
+  CURRENT_MODEL = key;
+  try { localStorage.setItem("n1v8_model", key); } catch(e) {}
+  applyModelSelection();
+}
+
+function applyModelSelection() {
+  ["sonnet","haiku"].forEach(function(k){
+    var el = document.getElementById("mdl-"+k);
+    if (el) el.classList.toggle("active", CURRENT_MODEL === k);
+  });
+  updateTokenDisplay();
+}
+
+// =============================================
+// AUTO-SAVE (anti-reload, anti-orientation-reset)
+// =============================================
+var AUTOSAVE_KEY = "n1v8_autosave";
+
+function autoSave() {
+  if (!G.char || G.gameEnded) return;
+  try {
+    var data = {
+      s:{hp:G.hp, hpMax:G.hpMax, inv:G.inv, conds:G.conds, notes:G.notes, history:G.history, spUsed:G.spUsed, inCombat:G.inCombat, combatRound:G.combatRound, initiative:G.initiative, currentTurn:G.currentTurn, battleMap:G.battleMap, battleMapLegend:G.battleMapLegend, gold:G.gold},
+      log:getLog(),
+      cid:G.char.id,
+      at:new Date().toLocaleString("fr-FR",{dateStyle:"short",timeStyle:"short"}),
+      ts:Date.now(),
+      t:G.history.filter(function(m){return m.role==="user";}).length
+    };
+    var jsonStr = JSON.stringify(data);
+    if (jsonStr.length < 4500000) {
+      try { localStorage.setItem(AUTOSAVE_KEY, jsonStr); } catch(e) { console.warn("autosave failed:", e.message); }
+    }
+  } catch(e) { console.warn("autosave exception:", e); }
+}
+
+function tryAutoRestore() {
+  var stored = null;
+  try { stored = localStorage.getItem(AUTOSAVE_KEY); } catch(e) { return; }
+  if (!stored) return;
+  try {
+    var d = JSON.parse(stored);
+    if (!d || !d.cid || !d.s) return;
+    var ch = CHARS.filter(function(c){return c.id===d.cid;})[0];
+    if (!ch) return;
+
+    // SANITIZE history: API requires alternating user/assistant ending with the role about to be answered.
+    // If the last message is from "assistant", the next API call will get a 400.
+    // Trim trailing assistant messages to leave the last user message at the end (or empty).
+    var history = d.s.history || [];
+    while (history.length > 0 && history[history.length - 1].role === "assistant") {
+      history.pop();
+    }
+    // Also enforce alternation: collapse consecutive same-role messages
+    var cleanHistory = [];
+    for (var i = 0; i < history.length; i++) {
+      var m = history[i];
+      if (cleanHistory.length === 0) {
+        if (m.role === "user") cleanHistory.push(m); // must start with user
+        continue;
+      }
+      var last = cleanHistory[cleanHistory.length - 1];
+      if (last.role === m.role) {
+        // Merge content with newline
+        last.content = (last.content || "") + "\n" + (m.content || "");
+      } else {
+        cleanHistory.push(m);
+      }
+    }
+
+    // Restore silently
+    G.char = ch;
+    G.hp = d.s.hp; G.hpMax = d.s.hpMax;
+    G.inv = d.s.inv || []; G.conds = d.s.conds || [];
+    G.notes = d.s.notes || ""; G.history = cleanHistory;
+    G.spUsed = d.s.spUsed || {1:0};
+    G.gold = (typeof d.s.gold === "number") ? d.s.gold : 15;
+    G.inCombat = d.s.inCombat || false;
+    G.combatRound = d.s.combatRound || 1;
+    G.initiative = d.s.initiative || [];
+    G.currentTurn = d.s.currentTurn || 0;
+    G.battleMap = d.s.battleMap;
+    G.battleMapLegend = d.s.battleMapLegend || "";
+    G.gameEnded = false;
+    G.awaitingReaction = false;
+    G.pendRoll = null;
+    document.getElementById("selscreen").classList.remove("on");
+    var gEl = document.getElementById("game");
+    gEl.style.display = "flex";
+    gEl.style.flexDirection = "column";
+    document.getElementById("hbhp").textContent = G.hp+"/"+G.hpMax+" PV";
+    setLog(d.log || "");
+    if (G.inCombat) {
+      document.getElementById("cbar").classList.add("on");
+      if (G.battleMap) {
+        document.getElementById("bmgrid").textContent = G.battleMap;
+        document.getElementById("bmleg").textContent = G.battleMapLegend;
+        document.getElementById("drawerMapGrid").textContent = G.battleMap;
+        document.getElementById("drawerMapLegend").textContent = G.battleMapLegend;
+        document.getElementById("bmap").classList.add("on");
+      }
+      document.getElementById("hCombatBtn").classList.add("on");
+      renderCombatBar();
+      updateTurnIndicator();
+      var curr = G.initiative[G.currentTurn];
+      if (curr && !curr.isPlayer && curr.alive && !G.gameEnded) {
+        showManualNextButton(curr);
+      }
+    } else {
+      document.getElementById("hCombatBtn").classList.remove("on");
+    }
+    lockAllDice();
+    refreshInputState();
+    addMsg("sys", "↻ Partie restaurée automatiquement (date : "+(d.at||"?")+")");
+    addMsg("sys", "💡 Si le jeu semble bloqué, tape n'importe quoi pour relancer le MJ, ou abandonne via le bouton ⏏ en haut.");
+  } catch(e) {
+    console.warn("autorestore failed:", e);
+    // If restore fails badly, offer escape
+    addMsg("sys", "⚠ Échec de restauration : " + e.message + ". Sauvegarde auto effacée.");
+    clearAutoSave();
+  }
+}
+
+function clearAutoSave() {
+  try { localStorage.removeItem(AUTOSAVE_KEY); } catch(e) {}
+}
+
+function abandonGame() {
+  if (!confirm("Abandonner la partie en cours et revenir à l'accueil ? L'auto-sauvegarde sera effacée. (Utilisez les slots manuels 💾 pour conserver une partie.)")) return;
+  clearAutoSave();
+  restartGame();
+}
+
+// =============================================
+// TOKEN USAGE DISPLAY (test/debug only)
+// =============================================
+function updateTokenDisplay() {
+  var el = document.getElementById("tokCounter");
+  if (!el) return;
+  var t = G.tokens;
+  var m = MODELS[CURRENT_MODEL] || MODELS["sonnet"];
+  // Compact pricing: model-specific input/output rates; cache write +25%, cache read -90%
+  var costIn = (t.input * m.priceIn) / 1000000;
+  var costOut = (t.output * m.priceOut) / 1000000;
+  var costCacheW = (t.cacheCreate * m.priceIn * 1.25) / 1000000;
+  var costCacheR = (t.cacheRead * m.priceIn * 0.10) / 1000000;
+  var total = costIn + costOut + costCacheW + costCacheR;
+  var withoutCache = (t.input + t.cacheCreate + t.cacheRead) * m.priceIn / 1000000 + costOut;
+  var saved = withoutCache - total;
+  el.textContent = "🪙 " + (t.input + t.cacheCreate + t.cacheRead) + "in/" + t.output + "out $" + total.toFixed(4);
+}
+
+function openTokenDetail() {
+  var t = G.tokens;
+  var m = MODELS[CURRENT_MODEL] || MODELS["sonnet"];
+  var costIn = (t.input * m.priceIn) / 1000000;
+  var costOut = (t.output * m.priceOut) / 1000000;
+  var costCacheW = (t.cacheCreate * m.priceIn * 1.25) / 1000000;
+  var costCacheR = (t.cacheRead * m.priceIn * 0.10) / 1000000;
+  var total = costIn + costOut + costCacheW + costCacheR;
+  var withoutCache = (t.input + t.cacheCreate + t.cacheRead) * m.priceIn / 1000000 + costOut;
+  var saved = withoutCache - total;
+  var savedPct = withoutCache > 0 ? Math.round((saved / withoutCache) * 100) : 0;
+
+  var html = '<div class="pt" style="margin-top:0">Consommation de la session</div>'
+    + '<div class="pn2">Claude ' + m.name + '</div>'
+    + '<div class="ps2">' + t.calls + ' appel(s) API · $' + m.priceIn + ' / $' + m.priceOut + ' par M tokens</div>'
+    + '<div class="pt">Tokens en entrée</div>'
+    + '<div style="font-size:11px;color:var(--dim);line-height:1.7">'
+    + '<div>Input non-mis-en-cache : <strong>' + t.input.toLocaleString() + '</strong></div>'
+    + '<div>Écriture cache : <strong>' + t.cacheCreate.toLocaleString() + '</strong> (+25%)</div>'
+    + '<div>Lecture cache : <strong style="color:#80e090">' + t.cacheRead.toLocaleString() + '</strong> (−90%)</div>'
+    + '<div style="border-top:1px solid var(--br);padding-top:3px;margin-top:3px"><strong>Total entrée : ' + (t.input + t.cacheCreate + t.cacheRead).toLocaleString() + '</strong></div>'
+    + '</div>'
+    + '<div class="pt">Tokens en sortie</div>'
+    + '<div style="font-size:11px;color:var(--dim)"><strong>' + t.output.toLocaleString() + '</strong></div>'
+    + '<div class="pt">Coût estimé (USD)</div>'
+    + '<div style="font-size:11px;color:var(--dim);line-height:1.7">'
+    + '<div>Input : $' + costIn.toFixed(4) + '</div>'
+    + '<div>Écriture cache : $' + costCacheW.toFixed(4) + '</div>'
+    + '<div>Lecture cache : $' + costCacheR.toFixed(4) + '</div>'
+    + '<div>Output : $' + costOut.toFixed(4) + '</div>'
+    + '<div style="border-top:1px solid var(--br);padding-top:3px;margin-top:3px;font-size:14px"><strong style="color:var(--go)">Total : $' + total.toFixed(4) + '</strong></div>'
+    + '</div>';
+
+  if (saved > 0) {
+    html += '<div class="pt">Économies grâce au cache</div>'
+      + '<div style="font-size:11px;color:#80e090;line-height:1.6">'
+      + '<div>Coût sans cache : $' + withoutCache.toFixed(4) + '</div>'
+      + '<div>Économisé : <strong>$' + saved.toFixed(4) + ' (' + savedPct + '%)</strong></div>'
+      + '</div>';
+  }
+
+  html += '<div class="pt">Réinitialiser</div>'
+    + '<button onclick="G.tokens={input:0,output:0,cacheCreate:0,cacheRead:0,calls:0};updateTokenDisplay();openTokenDetail()" style="font-family:Cinzel,serif;font-size:9px;letter-spacing:1px;text-transform:uppercase;padding:7px 11px;background:var(--lt);border:1px solid var(--br);color:var(--ft);cursor:pointer;width:100%">Remettre à zéro le compteur</button>';
+
+  document.getElementById("smi").innerHTML = html;
+  document.getElementById("smodal").style.display = "block";
+}
+
+// Section "Charger partie précédente" on home screen
+function renderResumeSection() {
+  var sec = document.getElementById("resume-section");
+  if (!sec) return;
+  var stored = null;
+  try { stored = localStorage.getItem(AUTOSAVE_KEY); } catch(e) {}
+  var promises = [];
+  for (var s=1; s<=SLOTS; s++) promises.push(ST.get(SK+s));
+  Promise.all(promises).then(function(results){
+    sec.innerHTML = "";
+    var hasAny = false;
+    // Auto-save (if exists and recent)
+    if (stored) {
+      try {
+        var d = JSON.parse(stored);
+        var ch = CHARS.filter(function(c){return c.id===d.cid;})[0];
+        if (ch) {
+          hasAny = true;
+          var div = document.createElement("div");
+          div.className = "resume-item";
+          div.innerHTML = '<div class="resume-name">↻ Reprendre — '+ch.nm+'</div>'
+            + '<div class="resume-meta">Auto-sauvegarde · '+(d.at||"?")+' · '+(d.t||0)+' tours</div>';
+          div.onclick = function(){ tryAutoRestore(); };
+          sec.appendChild(div);
+        }
+      } catch(e){}
+    }
+    // Manual slots
+    results.forEach(function(r, idx){
+      var slot = idx+1;
+      if (!r || !r.value) return;
+      var d;
+      try { d = JSON.parse(r.value); } catch(e){ return; }
+      var ch = CHARS.filter(function(c){return c.id===d.cid;})[0];
+      if (!ch) return;
+      hasAny = true;
+      var div = document.createElement("div");
+      div.className = "resume-item";
+      div.innerHTML = '<div class="resume-name">📂 Slot '+slot+' — '+ch.nm+'</div>'
+        + '<div class="resume-meta">'+(d.at||"")+' · '+(d.t||0)+' tours</div>';
+      div.onclick = function(){ loadGame(slot); };
+      sec.appendChild(div);
+    });
+    sec.style.display = hasAny ? "flex" : "none";
+    var lbl = document.getElementById("resume-label");
+    if (lbl) lbl.style.display = hasAny ? "block" : "none";
+  }).catch(function(){});
+}
+
+document.getElementById("akbtn").onclick = function() {
+  var k = document.getElementById("ak").value.trim();
+  var err = document.getElementById("akerr");
+  if (!k) { err.textContent = "Entrez votre clé."; return; }
+  if (k.indexOf("sk-") !== 0) { err.textContent = "Format invalide (sk-...)"; return; }
+  API_KEY = k;
+  try { localStorage.setItem("n1v8_key", k); } catch(e) {}
+  err.textContent = "";
+  showScreen("selscreen");
+};
+document.getElementById("ak").addEventListener("keydown", function(e) {
+  if (e.key === "Enter") document.getElementById("akbtn").click();
+});
+
+// =============================================
+// MODULE N1 - FULL DATA
+// =============================================
+var N1 = "SCENARIO DE TEST SIMPLE - HOMMLET, GREYHAWK\n"
++ "Village paisible de HOMMLET dans le royaume de Furyondy (Greyhawk). Le personnage arrive en ville pour son premier contrat d'aventurier : une recompense a ete offerte pour nettoyer la route de l'est infestee de bandits. Scenario lineaire en 3 actes pour tester le jeu.\n\n"
++ "=== ACTE 1 : L'AUBERGE DU LABOUREUR ACCUEILLANT ===\n"
++ "L'auberge centrale de Hommlet. Tenue par OSTLER GUNDIGOOT (homme chaleureux, non-combattant). Atmosphere vivante mais tendue : les clients parlent a voix basse des attaques recentes.\n"
++ "OBJECTIF: Le joueur doit y RECRUTER UN COMPAGNON PNJ pour l'aider sur la route.\n"
++ "REGLE DE COMPLEMENTARITE: Le compagnon propose doit COMBLER les faiblesses du personnage du joueur. Choisir UN candidat selon la classe indiquee dans PERSONNAGE :\n\n"
++ "JOUEUR = GUERRIER (melee solide, pas de magie) -> proposer un LANCEUR DE SORTS pour soutien et heals :\n"
++ "  JAROO ASHSTAFF - jeune druide itinerant en robe grise, bien accueilli au village.\n"
++ "  Druide Humain Niv.1 | init +2 | CA 14 (cuir+bouclier bois) | PV 10 | FOR+0 DEX+2 CON+1 SAG+3 | Baton +2 1d6 cont (Topple) | Sorts SAG DD13 att+5 | 2 empl.niv1 | Cants: Druidique, Rafale de feuilles, Resistance | Prep: Soins(1d8+3), Charme-animal, Enchevetrement\n\n"
++ "JOUEUR = CLERC (soutien + melee, faible en DPS precis et furtif) -> proposer un COMBATTANT AGILE A DISTANCE :\n"
++ "  KOBORT - vieux ranger taciturne, barbe grise, arc en travers du dos.\n"
++ "  Ranger Humain Niv.1 | init +3 | CA 15 (cuir cloute) | PV 12 | FOR+2 DEX+3 CON+1 SAG+2 | Epee courte +5 1d6+3 perf (Vex) | Arc long +5 1d8+3 perf 45/180m (Slow) | Ennemi favori: Humanoides (+2 dmg) | Pistage | Survie+4 Perception+4\n\n"
++ "JOUEUR = ROUBLARD (DPS furtif fragile) -> proposer un TANK pour encaisser :\n"
++ "  ELMO - homme robuste trentaine, ancien milicien, assis seul avec une chope.\n"
++ "  Guerrier Humain Niv.1 | init +2 | CA 16 (cotte mailles+bouclier) | PV 13 | FOR+3 DEX+2 CON+2 | Epee longue +5 1d8+3 tranch (Sap) | Javelots x3 +5 1d6+3 perf 9/36m | Second Souffle 1x/rc 1d10+1 PV | Style Duel +2 dmg\n\n"
++ "JOUEUR = MAGICIENNE (fragile, a distance, peu d'empl.) -> proposer un TANK comme bouclier :\n"
++ "  ELMO - homme robuste trentaine, ancien milicien, assis seul avec une chope.\n"
++ "  Guerrier Humain Niv.1 | init +2 | CA 16 (cotte mailles+bouclier) | PV 13 | FOR+3 DEX+2 CON+2 | Epee longue +5 1d8+3 tranch (Sap) | Javelots x3 +5 1d6+3 perf 9/36m | Second Souffle 1x/rc 1d10+1 PV | Style Duel +2 dmg\n\n"
++ "Le compagnon accepte contre une part egale du butin + 5po d'avance (negociable via Persuasion DD 10 a 2po). Accepte dans tous les cas raisonnables.\n"
++ "Si le joueur refuse, signale que le PNJ le regarde partir avec scepticisme mais continue l'aventure.\n"
++ "Quand le joueur recrute, note dans ta reponse: {\"STATE\":{\"note\":\"Compagnon: <nom> (<classe>)\"}}\n\n"
++ "=== ACTE 2 : LE RAVIN SUR LA ROUTE DE L'EST ===\n"
++ "Apres 2h de marche sur la route forestiere, le joueur arrive devant un RAVIN de 3 metres de large qui coupe la route. Un vieux pont de bois s'est effondre il y a peu. Au fond : 6 metres de hauteur, rochers, torrent. Tomber = 2d6 degats contondants.\n"
++ "OPTIONS POSSIBLES (le joueur choisit) :\n"
++ "  A) SAUTER : Jet d'Athletisme DD 13 (saut sans elan) ou DD 10 (avec elan sur 3m minimum). Echec = chute 2d6 + nouveau jet Athletisme DD 12 pour remonter.\n"
++ "  B) CONTOURNER : Jet de Survie DD 12 pour trouver un passage a 30min au nord. Pas de risque.\n"
++ "  C) BRICOLER UN PONT : Jet d'Investigation DD 14 pour trouver materiaux (arbre tombe) puis Athletisme DD 10 pour le positionner. Prend 20min.\n"
++ "  D) Autre idee creative : accepter si raisonnable, DD adapte.\n"
++ "Si compagnon present, il aide selon la methode (avantage sur le jet, ou jet parallele).\n\n"
++ "=== ACTE 3 : EMBUSCADE DES BANDITS ===\n"
++ "Apres le ravin, la route s'enfonce dans les bois. A un tournant, embuscade : 3 BANDITS equilibres pour un combat juste avec le joueur (+ compagnon si recrute).\n"
++ "DECLENCHEMENT: Le joueur entend des bruissements (jet de Perception DD 12 pour detecter l'embuscade - SI REUSSI: pas de surprise. SI RATE: SURPRISE = DESAVANTAGE a son jet d'initiative en regles 2024). Le chef crie 'Votre bourse ou votre vie !'\n"
++ "Option dialogue: Persuasion DD 15 ou Intimidation DD 13 pour qu'ils s'enfuient sans combat.\n\n"
++ "COMBAT - STAT BLOCKS (PV caches du joueur, combat jusqu'a 0PV strict) :\n"
++ "BANDIT GARM (chef, ND 1/2): init +1 | CA 13 (armure de cuir cloutee) | PV 16 | FOR+1 DEX+1 | Saves:FOR+3 CON+3 | Scimitar +3 1d6+1 tranch (Nick) | Arbalete legere +3 1d8+1 perf 24/96m\n"
++ "BANDITS x2 (ND 1/8): init +1 | CA 12 | PV 11 | FOR+1 DEX+1 | Gourdin +3 1d6+1 cont (Slow) | Dague lancee +3 1d4+1 perf 6/18m\n"
++ "Position initiale: joueur (et compagnon si present) sur la route, 2 bandits en face a 6m avec gourdins, Garm et 1 bandit sur les flancs (3m a droite et 3m a gauche) avec armes a distance pret a 4m.\n"
++ "Battle map suggere 10x10 : arbres (T) autour de la route, route en terre au milieu.\n"
++ "Tactique bandits: Garm donne les ordres, vise le plus blesse. Les sbires foncent au corps-a-corps. Si Garm tombe ou PV faibles perceptibles (jet Perspicacite DD 10 pour l'estimer), les 2 bandits restants PEUVENT tenter de fuir (a la discretion du MJ, jet Moral d20 DD 10 pour eux).\n"
++ "Recompenses apres victoire: 45po sur les cadavres, une carte notee 'Camp de Drell' (teaser pour une suite potentielle), sac avec 3 rations et 2 torches.\n\n"
++ "=== FIN DE TEST ===\n"
++ "Apres le combat, narration courte : le joueur (et son compagnon) peut rentrer a Hommlet reclamer sa recompense aupres du MAIRE TERJON au temple de St Cuthbert. 100po de recompense + reconnaissance du village. FIN.";
+
+// =============================================
+// CHARACTERS - D&D 2024 SRD 5.2 COMPLET
+// =============================================
+var CHARS = [
+{
+  id:"aldric", nm:"Aldric Forgebraise",
+  sub:"Guerrier · Humain · Niv.1",
+  background:"Soldat",
+  bgDesc:"Ancien garde de caravane. Maitrise militaire de vos armes.",
+  bdg:"bG", bt:"GUERRIER",
+  stats:{FOR:17,DEX:13,CON:16,INT:10,SAG:13,CHA:10},
+  hp:13, hpMax:13, ca:18, init:"+1",
+  saves:[{n:"FOR",v:"+5",p:1},{n:"DEX",v:"+1"},{n:"CON",v:"+5",p:1},{n:"INT",v:"+0"},{n:"SAG",v:"+1"},{n:"CHA",v:"+0"}],
+  skills:[
+    {n:"Athletisme(FOR)",v:"+5"},
+    {n:"Intimidation(CHA)",v:"+2"},
+    {n:"Perception(SAG)",v:"+3"},
+    {n:"Survie(SAG)",v:"+3"}
+  ],
+  bgFeat:"Costaud : +5 capacite transport, avantage jets FOR vs objets",
+  weaponMastery:[
+    {n:"Épée longue",mastery:"Sap",desc:"Sap: cible a désavantage sur sa prochaine attaque jusqu'à la fin de votre prochain tour"},
+    {n:"Arbalète légère",mastery:"Slow",desc:"Slow: vitesse de la cible -3m jusqu'au début de votre prochain tour"}
+  ],
+  eq:[
+    "Épée longue +1d8+5 tranchant (Versatile d10, Maîtrise Sap)",
+    "Cotte de mailles CA 16",
+    "Bouclier (+2 CA)",
+    "Arbalète légère (1d8+1 perf., 24/96m, Maîtrise Slow)",
+    "20 carreaux d'arbalète",
+    "Hachette (1d6+3 tranch., lancer 6/18m, Légère)",
+    "Paquet d'explorateur (sac, corde 15m, rations 10j, gourde, torches x10, briquet, pioche)",
+    "Insigne militaire",
+    "Dés à jouer en os",
+    "Dagues de voyage x2",
+    "10 po"
+  ],
+  atk:[
+    {n:"Épée longue (1 main)",b:"+5",d:"1d8+5 tranch.",note:"+Sap: désavantage prochaine attaque cible"},
+    {n:"Épée longue (2 mains)",b:"+5",d:"1d10+5 tranch.",note:"Versatile, sans bouclier"},
+    {n:"Arbalète légère",b:"+3",d:"1d8+1 perf.",note:"24/96m, +Slow: -3m vitesse cible"},
+    {n:"Hachette",b:"+5",d:"1d6+3 tranch.",note:"Lancer 6/18m, Légère"}
+  ],
+  feats:[
+    "⚔ Style de combat : DUEL — +2 dégâts avec arme à 1 main si pas d'autre arme (bouclier OK)",
+    "💪 Second Souffle (1×/repos court) : ACTION BONUS → récupère 1d10+1 PV",
+    "🗡 MAÎTRISE D'ARMES 2024 : 2 armes avec propriétés de maîtrise (Épée longue=Sap, Arbalète légère=Slow)",
+    "🛡 Maîtrises : toutes armures, boucliers, armes simples et de guerre",
+    "🎯 Sauvegardes : FOR & CON maîtrisées (+BM)",
+    "👤 Humain 2024 : Résolu (relance 1 échec par repos long), 1 compétence bonus, 1 don d'origine",
+    "📜 Background Soldat : compétences Athlétisme+Intimidation, outils jeux d'échecs, don Costaud"
+  ],
+  sp:null,
+  ks:[{l:"PV",v:"13"},{l:"CA",v:"18"},{l:"ATT",v:"+5"}],
+  desc:"Ancien garde de caravane. Maîtrise militaire, cœur loyal."
+},
+{
+  id:"mira", nm:"Sœur Mira",
+  sub:"Clerc · Halfeline · Niv.1",
+  background:"Acolyte",
+  bgDesc:"Élevée au temple. Savoir religieux et sens de la médecine.",
+  bdg:"bC", bt:"CLERC",
+  stats:{FOR:10,DEX:15,CON:13,INT:10,SAG:17,CHA:14},
+  hp:9, hpMax:9, ca:16, init:"+2",
+  saves:[{n:"FOR",v:"+0"},{n:"DEX",v:"+2"},{n:"CON",v:"+1"},{n:"INT",v:"+0"},{n:"SAG",v:"+5",p:1},{n:"CHA",v:"+4",p:1}],
+  skills:[
+    {n:"Perspicacité(SAG)",v:"+5"},
+    {n:"Médecine(SAG)",v:"+5"},
+    {n:"Religion(INT)",v:"+2"}
+  ],
+  bgFeat:"Éveil magique : apprend un sort mineur de votre classe",
+  weaponMastery:[
+    {n:"Masse",mastery:"Sap",desc:"Sap: cible a désavantage sur sa prochaine attaque"}
+  ],
+  eq:[
+    "Masse (1d6 contondant, Maîtrise Sap)",
+    "Armure d'écailles CA 14+DEX(max+2)=16",
+    "Bouclier (+2 CA — Non cumulable avec écailles = CA 16)",
+    "Symbole sacré (emblème de l'Unité)",
+    "Paquet de prêtre (sac, couverture, bougies x10, boîte à aumône, encens, huile, tome de prières)",
+    "Livre de prières",
+    "Bandelettes cérémonielles",
+    "Rations 5j, gourde",
+    "10 po"
+  ],
+  atk:[
+    {n:"Masse",b:"+2",d:"1d6 cont.",note:"+Sap: désavantage prochaine attaque cible"},
+    {n:"Flamme sacrée (sort mineur)",b:"save DEX DD13",d:"1d8 radiant",note:"Portée 18m, ignore couverture"},
+    {n:"Guide (sort mineur)",b:"contact",d:"+1d4 prochain jet d'Attr.",note:"Conc. 1min, allié"}
+  ],
+  feats:[
+    "📿 Incantation divine (SAG) : DD sorts 13, bonus attaque sorts +5",
+    "🔹 Emplacements : 2 × niveau 1 · 3 sorts mineurs · 4 sorts préparés",
+    "📖 Sorts 2024 — préparation flexible : au repos long, choisir 4 sorts parmi la liste de Clerc pour les préparer",
+    "✨ Sous-classe (Domaine divin) : CHOIX AU NIVEAU 3 (non disponible au niveau 1)",
+    "🛡 Maîtrises 2024 : armures légères/intermédiaires, boucliers, armes simples",
+    "🍀 Halfeline 2024 : CHANCEUX (relance 1 naturel), BRAVE (avantage saves vs Terrifié), AGILITÉ (traverse case plus grand)",
+    "🗡 MAÎTRISE D'ARMES 2024 : Masse (Sap)",
+    "📜 Background Acolyte : Perspicacité+Religion, maîtrise outils calligraphe, don Éveil magique"
+  ],
+  sp:{
+    ab:"SAG", dc:13, att:"+5",
+    sl:{1:2}, us:{1:0},
+    cants:[
+      "Flamme sacrée (1d8 rad, save DEX DD13, portée 18m, ignore couverture)",
+      "Lumière (objet brille 6m rayon, 1h, sans conc.)",
+      "Guide (+1d4 au prochain jet de caract., conc. 1min)",
+      "Stabilisation (contact, stabilise inconscient à 1PV minimum effectif)"
+    ],
+    prep:[
+      "Bénédiction (conc. 1min, 3 cibles, +1d4 jets attaque & saves, 1 empl.)",
+      "Soins (contact, 1d8+3 PV, 1 empl.)",
+      "Commandement (SAG DD13, 1 mot: Fuis/Tombe/Approche/Lâche/Stoppe, portée 18m, 1 empl.)",
+      "Mot de guérison (ACTION BONUS, portée 18m, 1d4+3 PV, 1 empl.)"
+    ]
+  },
+  ks:[{l:"PV",v:"9"},{l:"CA",v:"16"},{l:"SOIN",v:"1d8+3"}],
+  desc:"Acolyte dévouée. Volonté de fer sous un sourire paisible."
+},
+{
+  id:"corvin", nm:"Corvin l'Ombre",
+  sub:"Roublard · Demi-Elfe · Niv.1",
+  background:"Criminel",
+  bgDesc:"Informateur et cambrioleur reconverti. Connait la pègre.",
+  bdg:"bR", bt:"ROUBLARD",
+  stats:{FOR:9,DEX:17,CON:14,INT:13,SAG:11,CHA:16},
+  hp:10, hpMax:10, ca:15, init:"+3",
+  saves:[{n:"FOR",v:"-1"},{n:"DEX",v:"+5",p:1},{n:"CON",v:"+2"},{n:"INT",v:"+3",p:1},{n:"SAG",v:"+0"},{n:"CHA",v:"+3"}],
+  skills:[
+    {n:"Discrétion(DEX) EXPERTISE",v:"+7"},
+    {n:"Tromperie(CHA) EXPERTISE",v:"+7"},
+    {n:"Perception(SAG)",v:"+2"},
+    {n:"Persuasion(CHA)",v:"+5"},
+    {n:"Investigation(INT)",v:"+3"},
+    {n:"Perspicacité(SAG)",v:"+2"}
+  ],
+  bgFeat:"Furtif : compétences Discrétion et Tromperie, outils de voleur",
+  weaponMastery:[
+    {n:"Rapière",mastery:"Vex",desc:"Vex: si vous touchez, avantage sur votre prochaine attaque contre la même cible"}
+  ],
+  eq:[
+    "Rapière (1d8+3 perforant, Finesse, Maîtrise Vex)",
+    "Arc court (1d6+3 perforant, 24/96m, Maîtrise Vex)",
+    "20 flèches",
+    "Armure de cuir CA 11+DEX=14+ou CA 15 avec cuir clouté — CA 15",
+    "Dagues x2 (1d4+3 perf., Finesse, Légère, Lancer 6/18m)",
+    "Outils de voleur (maîtrisés — crocheter, désamorcer)",
+    "Paquet de cambrioleur (sac, bille, grelot, corde 15m, lanterne, pioche, burin, pieds-de-biche)",
+    "Vêtement noir à capuche",
+    "Pochette (15po)"
+  ],
+  atk:[
+    {n:"Rapière",b:"+5",d:"1d8+3 perf. (+1d6 sournoise*)",note:"Finesse, +Vex: avantage prochaine attaque même cible"},
+    {n:"Arc court",b:"+5",d:"1d6+3 perf. (+1d6 sournoise*)",note:"24/96m, +Vex"},
+    {n:"Dague",b:"+5",d:"1d4+3 perf. (+1d6 sournoise*)",note:"Finesse, Légère, Lancer 6/18m"}
+  ],
+  feats:[
+    "🗡 ATTAQUE SOURNOISE 1d6 : 1×/tour, +1d6 dmg si avantage OU allié adjacent cible (sans désavantage sur attaque)",
+    "🎭 EXPERTISE (niv.1) : Discrétion +7, Tromperie +7 (double maîtrise)",
+    "🗝 Argot des voleurs : langage secret criminel",
+    "🔓 Outils de voleur : maîtrisés (crocheter serrures, désamorcer pièges)",
+    "🗡 MAÎTRISE D'ARMES 2024 : Rapière & Arc court (Vex)",
+    "🧝 Demi-Elfe 2024 : Vision dans le noir 18m, Ascendance féerique (avantage saves vs Charmé, immunité sommeil magique), +2 compétences",
+    "📜 Background Criminel : Discrétion+Tromperie, outils de voleur+jeu de cartes, don Furtif"
+  ],
+  sp:null,
+  ks:[{l:"PV",v:"10"},{l:"CA",v:"15"},{l:"FURT",v:"+7"}],
+  desc:"Informateur reconverti. Parle à tous, fait confiance à personne."
+},
+{
+  id:"elysa", nm:"Elysa Ventbris",
+  sub:"Magicienne · Elfe Haut-Elfe · Niv.1",
+  background:"Sage",
+  bgDesc:"Étudiante d'une académie arcanique exilée. Érudite.",
+  bdg:"bM", bt:"MAGE",
+  stats:{FOR:8,DEX:16,CON:13,INT:17,SAG:12,CHA:10},
+  hp:7, hpMax:7, ca:13, init:"+3",
+  saves:[{n:"FOR",v:"-1"},{n:"DEX",v:"+3"},{n:"CON",v:"+1"},{n:"INT",v:"+5",p:1},{n:"SAG",v:"+3",p:1},{n:"CHA",v:"+0"}],
+  skills:[
+    {n:"Arcanes(INT)",v:"+5"},
+    {n:"Histoire(INT)",v:"+5"},
+    {n:"Investigation(INT)",v:"+5"},
+    {n:"Perception racial(SAG)",v:"+3"}
+  ],
+  bgFeat:"Initié à la magie (Magicien) : 2 sorts mineurs + 1 sort niv.1 supplémentaire",
+  weaponMastery:[
+    {n:"Bâton",mastery:"Topple",desc:"Topple: save CON ou cible Renversée (Prone)"},
+    {n:"Dague",mastery:"Nick",desc:"Nick: peut attaquer avec une arme Légère sans action bonus"}
+  ],
+  eq:[
+    "Bâton (1d6-1 contondant, Versatile 1d8, Maîtrise Topple)",
+    "Dague (1d4-1 perf., Finesse, Légère, Lancer 6/18m, Maîtrise Nick)",
+    "Grimoire (6 sorts niv.1 copiés)",
+    "Focalisateur arcanique (cristal)",
+    "Composantes matérielles (sachet)",
+    "Paquet de savant (sac, livre de savoir, encre x2, plume, parchemins x10, sablier, petit couteau)",
+    "Livre de souvenirs (background Sage)",
+    "Pochette 10po"
+  ],
+  atk:[
+    {n:"Projectile magique",b:"AUTO",d:"3 × (1d4+1) force",note:"3 fléchettes auto, portée 36m, 1 empl. niv.1"},
+    {n:"Rayon de givre (mineur)",b:"+5",d:"1d8 froid",note:"Portée 18m, vitesse cible -3m si touché"},
+    {n:"Trait de feu (mineur)",b:"+5",d:"1d10 feu",note:"Portée 36m"},
+    {n:"Bâton",b:"+1",d:"1d6-1 cont.",note:"Versatile 1d8-1, +Topple save CON DD 9"},
+    {n:"Dague",b:"+3",d:"1d4-1 perf.",note:"Finesse, Légère, +Nick"}
+  ],
+  feats:[
+    "📚 GRIMOIRE : Armure du mage, Bouclier, Projectile magique, Charme-personne, Identification★, Sommeil",
+    "✨ Sorts préparés (INT+niv = 5) : choisit 5 parmi grimoire chaque matin",
+    "🔮 Incantation arcanique (INT) : DD sorts 13, bonus attaque sorts +5, 2 empl. niv.1",
+    "🔁 Récupération arcanique (1×/repos court) : récupère emplacements totalisant ≤ 1 (donc 1 empl. niv.1)",
+    "🗡 MAÎTRISE D'ARMES 2024 : Bâton (Topple), Dague (Nick)",
+    "🧝 Elfe Haut-Elfe 2024 : Vision dans le noir 18m, Perception maîtrisée, Ascendance féerique, Transe(4h=repos 8h), CANTRIP BONUS (un sort mineur de Magicien inclus)",
+    "✦ Sort mineur racial (Haut-Elfe) : Prestidigitation (petits effets cosmétiques)",
+    "📜 Background Sage : Arcanes+Histoire, outils calligraphe, don Initié à la magie",
+    "★ Identification = rituel (10min, sans emplacement)"
+  ],
+  sp:{
+    ab:"INT", dc:13, att:"+5",
+    sl:{1:2}, us:{1:0},
+    cants:[
+      "Trait de feu (1d10 feu, portée 36m)",
+      "Rayon de givre (1d8 froid + vitesse cible -3m, portée 18m)",
+      "Illusion mineure (son ou image statique, 1min, portée 9m)",
+      "Prestidigitation (effets mineurs, racial Haut-Elfe)"
+    ],
+    prep:[
+      "Armure du mage (action, CA 13+DEX=16 pendant 8h, non-conc., 1 empl. niv.1)",
+      "Bouclier (RÉACTION, +5 CA jusqu'au prochain tour OU annule Projectile magique, 1 empl. niv.1)",
+      "Projectile magique (3 fléchettes × 1d4+1 force auto, portée 36m, 1 empl. niv.1)",
+      "Charme-personne (save SAG DD13, Charmé 1h, portée 9m, 1 empl. niv.1)",
+      "Sommeil 2024 (save SAG DD13, sphère 1,5m portée 27m, créatures touchées subissent Incapacité jusqu'à fin de votre prochain tour, tombent Prone, 1 empl. niv.1)"
+    ]
+  },
+  ks:[{l:"PV",v:"7"},{l:"CA",v:"13/16*"},{l:"DD",v:"13"}],
+  desc:"Érudite exilée. Fragile mais redoutable à distance."
+}
+];
+
+// =============================================
+// STATE
+// =============================================
+var G = {
+  char:null, hp:0, hpMax:0, inv:[], conds:[], notes:"",
+  history:[], pendRoll:null, rollsDone:[], rollCnt:0,
+  spUsed:{1:0}, dSucc:0, dFail:0, gold:0,
+  inCombat:false, combatRound:1, initiative:[], currentTurn:0,
+  battleMap:null, battleMapLegend:"",
+  awaitingReaction:false, autoTurnTimer:null,
+  tokens:{input:0, output:0, cacheCreate:0, cacheRead:0, calls:0}
+};
+var selId = null;
+
+function mS(v){var m=Math.floor((v-10)/2);return m>=0?"+"+m:""+m;}
+function rRaw(s){return Math.floor(Math.random()*s)+1;}
+function fmt(t){return t.replace(/\*\*(.+?)\*\*/g,"<strong>$1</strong>").replace(/\*(.+?)\*/g,"<em>$1</em>").replace(/\n/g,"<br>");}
+
+// Dice uniformity test (accessible via console: testDice(10000))
+window.testDice = function(n) {
+  n = n || 10000;
+  var counts = {};
+  for (var i=1; i<=20; i++) counts[i] = 0;
+  for (var j=0; j<n; j++) counts[rRaw(20)]++;
+  var expected = n/20;
+  var out = "Test d20 sur "+n+" lancers (attendu: "+expected+" par valeur)\n";
+  for (var k=1; k<=20; k++) {
+    var dev = ((counts[k]-expected)/expected*100).toFixed(1);
+    out += k+": "+counts[k]+" ("+(dev>=0?"+":"")+dev+"%)\n";
+  }
+  console.log(out);
+  return counts;
+};
+
+// =============================================
+// INIT CARDS
+// =============================================
+function initCards() {
+  var g = document.getElementById("cgrid");
+  if (!g) return;
+  g.innerHTML = "";
+  CHARS.forEach(function(c) {
+    var d = document.createElement("div");
+    d.className = "cc";
+    var ks = c.ks.map(function(k){return '<div class="ck"><span class="ckl">'+k.l+'</span><span class="ckv">'+k.v+'</span></div>';}).join("");
+    var statsHtml = ["FOR","DEX","SAG"].map(function(k){return '<div class="ck"><span class="ckl">'+k+'</span><span class="ckv">'+c.stats[k]+'</span></div>';}).join("");
+    var featsHtml = c.feats.slice(0,3).map(function(f){return "<li>"+f+"</li>";}).join("");
+    d.innerHTML = '<span class="cbdg '+c.bdg+'">'+c.bt+'</span>'
+      + '<div class="ccn">'+c.nm+'</div>'
+      + '<div class="ccs">'+c.sub+' · '+c.background+'</div>'
+      + '<div class="ckg">'+ks+statsHtml+'</div>'
+      + '<ul class="cfl">'+featsHtml+'<li style="color:var(--ft);font-style:italic">'+c.desc+'</li></ul>';
+    d.onclick = function() {
+      document.querySelectorAll(".cc").forEach(function(x){x.classList.remove("sel");});
+      d.classList.add("sel");
+      selId = c.id;
+      document.getElementById("stbtn").disabled = false;
+    };
+    g.appendChild(d);
+  });
+}
+
+// =============================================
+// START GAME
+// =============================================
+function startGame() {
+  var c = CHARS.filter(function(x){return x.id===selId;})[0];
+  if (!c) return;
+  clearAutoSave(); // fresh start, drop previous autosave
+  G.tokens = {input:0, output:0, cacheCreate:0, cacheRead:0, calls:0};
+  updateTokenDisplay();
+  G.char = c;
+  G.hp = c.hp;
+  G.hpMax = c.hp;
+  G.inv = c.eq.slice();
+  G.spUsed = {1:0};
+  G.conds = [];
+  G.history = [];
+  G.notes = "";
+  G.inCombat = false;
+  G.initiative = [];
+  // Extract starting gold from inventory ("X po" entries)
+  G.gold = 0;
+  G.inv = G.inv.filter(function(item){
+    var m = item.match(/^(\d+)\s*po$/i);
+    if (m) { G.gold += parseInt(m[1]); return false; }
+    return true;
+  });
+  if (G.gold === 0) G.gold = 15; // fallback
+  document.getElementById("selscreen").classList.remove("on");
+  var gEl = document.getElementById("game");
+  gEl.style.display = "flex";
+  gEl.style.flexDirection = "column";
+  lockAllDice();
+  renderSaveSlots();
+  addMsg("sys", "— L'aventure commence à Hommlet —");
+  addMsg("sys", "💰 Bourse de départ : "+G.gold+" po");
+  callDM("BEGIN");
+}
+
+// =============================================
+// SHEET
+// =============================================
+function buildSheet() {
+  var c = G.char;
+  if (!c) return "";
+  var pct = Math.max(0, G.hp/G.hpMax*100);
+  var bc = pct>50?"#2a6b3a":pct>25?"#c9952a":"#9b2318";
+  var statsHtml = Object.keys(c.stats).map(function(k){var v=c.stats[k];return '<div class="sb"><span class="sl2">'+k+'</span><span class="sv2">'+v+'</span><span class="sm2">'+mS(v)+'</span></div>';}).join("");
+  var savesHtml = c.saves.map(function(s){return '<span style="color:'+(s.p?"var(--gl)":"var(--ft)")+'">'+s.n+" "+s.v+'</span>';}).join(" · ");
+  var condsHtml = G.conds.length ? G.conds.map(function(x){return '<span class="ctg">'+x+'</span>';}).join("") : '<span style="font-size:9px;font-style:italic;color:var(--ft)">Aucune</span>';
+  var skHtml = c.skills.map(function(s){return "<li>"+s.n+" <strong>"+s.v+"</strong></li>";}).join("");
+  var invHtml = G.inv.map(function(i){return "<li>"+i+"</li>";}).join("");
+  var atkHtml = c.atk.map(function(a){return "<li><strong>"+a.n+"</strong> "+a.b+" → "+a.d+(a.note?' <em style="color:var(--ft)">('+a.note+')</em>':"")+"</li>";}).join("");
+  var featsHtml = c.feats.map(function(f){return '<div style="margin-bottom:3px">'+f+'</div>';}).join("");
+  var wmHtml = c.weaponMastery ? c.weaponMastery.map(function(w){return '<li><strong>'+w.n+'</strong> — '+w.mastery+'<br><em style="color:var(--ft)">'+w.desc+'</em></li>';}).join("") : "";
+
+  var slotHtml = "";
+  if (c.sp) {
+    Object.keys(c.sp.sl).forEach(function(lv){
+      var tot = c.sp.sl[lv]; var used = G.spUsed[lv]||0;
+      var pips = "";
+      for (var i=0; i<tot; i++) pips += '<div class="spip'+(i<used?" used":"")+'"></div>';
+      slotHtml += '<div class="srow"><span style="font-family:Cinzel,serif;font-size:8px;color:var(--ft);margin-right:3px">Niv.'+lv+':</span>'+pips+'<span style="font-family:Cinzel,serif;font-size:8px;color:var(--ft);margin-left:4px">'+(tot-used)+'/'+tot+'</span></div>';
+    });
+    var cantsHtml = c.sp.cants.map(function(s){return "<li>"+s+"</li>";}).join("");
+    var prepHtml = c.sp.prep.map(function(s){return "<li>"+s+"</li>";}).join("");
+    slotHtml = '<div class="pt">Emplacements</div>'+slotHtml
+      + '<div class="pt">Sorts mineurs (illimités)</div><ul class="sklist">'+cantsHtml+'</ul>'
+      + '<div class="pt">Sorts préparés</div><ul class="sklist">'+prepHtml+'</ul>';
+  }
+
+  return '<div class="pt" style="margin-top:0">Personnage</div>'
+    + '<div class="pn2">'+c.nm+'</div>'
+    + '<div class="ps2">'+c.sub+'</div>'
+    + '<div class="bgh">📜 Background : '+c.background+' — '+c.bgDesc+'</div>'
+    + '<div class="pt">Caractéristiques</div><div class="sg">'+statsHtml+'</div>'
+    + '<div class="pt">PV · CA · Init · BM</div>'
+    + '<div class="hrow"><span class="hl2">PV</span><span class="hv2">'+G.hp+' / '+G.hpMax+'</span></div>'
+    + '<div class="hbg"><div class="hf" style="width:'+pct+'%;background:'+bc+'"></div></div>'
+    + '<div class="tri2"><div><span class="tl2">CA</span><span class="tv2">'+c.ca+'</span></div><div><span class="tl2">INIT</span><span class="tv2">'+c.init+'</span></div><div><span class="tl2">BM</span><span class="tv2" style="color:var(--go)">+2</span></div></div>'
+    + '<div class="pt">Sauvegardes</div><div style="font-size:10px;color:var(--gl);line-height:1.8">'+savesHtml+'</div>'
+    + '<div class="pt">Conditions</div><div class="cds">'+condsHtml+'</div>'
+    + slotHtml
+    + '<div class="pt">Compétences maîtrisées</div><ul class="sklist">'+skHtml+'</ul>'
+    + (wmHtml ? '<div class="pt">Maîtrises d\'armes 2024</div><ul class="sklist">'+wmHtml+'</ul>' : "")
+    + '<div class="pt">Attaques</div><ul class="sklist">'+atkHtml+'</ul>'
+    + '<div class="pt">Inventaire</div>'
+    + '<div style="font-family:Cinzel,serif;font-size:11px;color:var(--gp);margin-bottom:4px;">💰 Bourse : <strong>'+G.gold+' po</strong></div>'
+    + '<ul class="ivlist">'+invHtml+'</ul>'
+    + '<div class="pt">Capacités</div><div class="fts">'+featsHtml+'</div>'
+    + (G.notes ? '<div class="pt">Notes</div><div style="font-size:10px;color:var(--ft);font-style:italic">'+G.notes+'</div>' : "");
+}
+
+function openSheet() {
+  document.getElementById("smi").innerHTML = buildSheet();
+  document.getElementById("smodal").style.display = "block";
+}
+
+// =============================================
+// LOG
+// =============================================
+function addMsg(type, text, cls) {
+  var log = document.getElementById("log");
+  var div = document.createElement("div");
+  div.className = "msg";
+  var nm = G.char ? G.char.nm : "Joueur";
+  if (type === "dm") { div.className += " dm"; div.innerHTML = '<span class="l">Maître du Jeu</span>'+fmt(text); }
+  else if (type === "pl") { div.className += " pl"; div.innerHTML = '<span class="l">'+nm+'</span>'+fmt(text); }
+  else if (type === "roll") { div.className += " roll"+(cls?" "+cls:""); div.textContent = text; }
+  else if (type === "sys") { div.className += " sys"; div.textContent = text; }
+  else if (type === "cbt") { div.className += " cbt"; div.innerHTML = fmt(text); }
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+}
+
+// =============================================
+// DICE ENGINE
+// =============================================
+// Unified input state manager — call this everywhere instead of setInputLocked(false) directly
+function refreshInputState() {
+  var reason = "";
+  if (G.pendRoll) {
+    setInputLocked(true);
+    reason = "BLOQUÉ (jet)";
+  } else if (G.gameEnded) {
+    setInputLocked(true);
+    reason = "BLOQUÉ (game over)";
+  } else if (G.awaitingReaction) {
+    // Reaction awaited — unlock even during enemy turn
+    setInputLocked(false);
+    reason = "OUVERT (réaction)";
+  } else if (G.inCombat && G.initiative.length) {
+    var curr = G.initiative[G.currentTurn];
+    if (curr && !curr.isPlayer) {
+      setInputLocked(true);
+      reason = "BLOQUÉ (tour: "+curr.name+")";
+    } else {
+      setInputLocked(false);
+      reason = "OUVERT (votre tour)";
+    }
+  } else {
+    setInputLocked(false);
+    reason = "OUVERT (hors combat)";
+  }
+  updateDebug(reason);
+}
+
+function updateDebug(inputReason) {
+  var ds = document.getElementById("dbgState");
+  var dt = document.getElementById("dbgTurn");
+  var di = document.getElementById("dbgInput");
+  var dr = document.getElementById("dbgRoll");
+  if (!ds) return;
+  ds.textContent = G.inCombat ? "Combat R"+G.combatRound : "Hors combat";
+  if (G.inCombat && G.initiative.length) {
+    var c = G.initiative[G.currentTurn];
+    dt.textContent = c ? c.name+(c.isPlayer?" (VOUS)":" (PNJ)") : "—";
+  } else {
+    dt.textContent = "—";
+  }
+  di.textContent = inputReason || (document.getElementById("inp").disabled ? "BLOQUÉ" : "OUVERT");
+  dr.textContent = G.pendRoll ? "d"+G.pendRoll.dice+" "+G.pendRoll.label : "aucun";
+}
+
+function setInputLocked(v) {
+  document.getElementById("inp").disabled = v;
+  document.getElementById("sbtn").disabled = v;
+  ["qb0","qb1","qb2","qb3","qb4","qb5"].forEach(function(id){
+    var b = document.getElementById(id);
+    if (b) b.disabled = v;
+  });
+  document.getElementById("blk").classList.toggle("on", v && !!G.pendRoll);
+  // Always update debug after state change
+  setTimeout(function(){ updateDebug(); }, 0);
+}
+
+function lockAllDice() {
+  ["d4","d6","d8","d10","d12","d20","d100"].forEach(function(id){
+    var b = document.getElementById("b"+id);
+    if (b) { b.disabled = true; b.classList.remove("req"); }
+  });
+  var rb = document.getElementById("rbnr");
+  if (rb) rb.classList.remove("on");
+  var dc = document.getElementById("dctx");
+  if (dc) dc.textContent = "Aucun jet en attente";
+  var dm = document.getElementById("dml");
+  if (dm) dm.textContent = "";
+  var md = document.getElementById("mdis");
+  if (md) md.textContent = "";
+}
+
+function requestRoll(rd) {
+  G.pendRoll = rd;
+  G.rollsDone = [];
+  G.rollCnt = rd.advantage ? 2 : 1;
+  setInputLocked(true);
+  lockAllDice();
+  var btn = document.getElementById("bd"+rd.dice);
+  if (btn) { btn.disabled = false; btn.classList.add("req"); }
+  document.getElementById("rbnr").classList.add("on");
+  var aL = rd.advantage==="advantage"?"Avantage":rd.advantage==="disadvantage"?"Désavantage":"Normal";
+  var aC = rd.advantage==="advantage"?"aa":rd.advantage==="disadvantage"?"ad":"an";
+  document.getElementById("bdet").textContent = rd.label + (rd.dc?" · DD"+rd.dc:"");
+  var ae = document.getElementById("badv");
+  ae.textContent = aL;
+  ae.className = "atg "+aC;
+  document.getElementById("dctx").textContent = rd.label;
+  var modStr = (rd.mod>=0?"+":"")+rd.mod;
+  document.getElementById("dml").textContent = "d"+rd.dice+modStr+(rd.modLabel?" ("+rd.modLabel+")":"")+(rd.dc?" DD"+rd.dc:"");
+  document.getElementById("mdis").textContent = modStr;
+}
+
+function rDie(sides) {
+  if (!G.pendRoll) return;
+  var r = rRaw(sides);
+  G.rollsDone.push(r);
+  document.getElementById("rres").textContent = r;
+  if (G.rollsDone.length < G.rollCnt) { addMsg("roll","d"+sides+" → "+r+" (1er jet, relancez)"); return; }
+  var p = G.pendRoll;
+  var fr = r;
+  if (p.advantage==="advantage") fr = Math.max.apply(null, G.rollsDone);
+  if (p.advantage==="disadvantage") fr = Math.min.apply(null, G.rollsDone);
+  var total = fr + p.mod;
+  var isCrit = sides===20 && fr===20;
+  var isFmbl = sides===20 && fr===1;
+  var succ = p.dc!=null ? (total>=p.dc) : null;
+  var cls = "";
+  if (isCrit) cls="crit"; else if (isFmbl) cls="fmbl"; else if (succ===true) cls="ok"; else if (succ===false) cls="fail";
+  var rs = G.rollsDone.length>1 ? "["+G.rollsDone.join(",")+"]→"+fr : "→"+fr;
+  var dc = p.dc!=null ? (succ?" ✓":" ✗")+" DD"+p.dc : "";
+  var prefix = isCrit?"CRITIQUE ! ":isFmbl?"FUMBLE ! ":"";
+  var modPart = p.mod!==0 ? (p.mod>0?"+":"")+p.mod+"="+total : "";
+  addMsg("roll", prefix+"d"+sides+" "+rs+modPart+dc, cls);
+
+  if (p.type === "death") {
+    if (fr === 20) { // nat 20 on death save = heal 1 HP and become conscious
+      G.hp = 1;
+      G.dSucc = 0; G.dFail = 0;
+      G.conds = G.conds.filter(function(x){return x !== "Inconscient";});
+      addMsg("cbt", "20 NATUREL sur jet de mort ! Vous revenez à 1 PV, conscient.");
+      document.getElementById("hbhp").textContent = G.hp+"/"+G.hpMax+" PV";
+      G.pendRoll = null; lockAllDice();
+      // Player turn is over (used the death save), advance turn if in combat
+      if (G.inCombat) {
+        nextTurn();
+      } else {
+        refreshInputState();
+      }
+      return;
+    }
+    if (isFmbl) { G.dFail += 2; } // fumble = 2 failures
+    else if (succ === true) { G.dSucc++; }
+    else { G.dFail++; }
+    addMsg("cbt", "Stabilisation : "+G.dSucc+"/3 ✓  "+G.dFail+"/3 ✗");
+    if (G.dSucc >= 3) {
+      addMsg("sys","— Stabilisé (0 PV mais vivant) —");
+      G.dSucc = 0; G.dFail = 0;
+      G.pendRoll=null; lockAllDice();
+      // Stabilized: still unconscious but no more death saves needed
+      if (G.inCombat) {
+        nextTurn();
+      } else {
+        refreshInputState();
+      }
+      return;
+    }
+    if (G.dFail >= 3) {
+      gameOver();
+      return;
+    }
+    // Still alive but not stabilized — wait for next player turn in initiative
+    G.pendRoll=null; lockAllDice();
+    if (G.inCombat) {
+      addMsg("sys", "Vous restez à 0 PV (inconscient). Le combat continue. Prochain jet de mort à votre prochain tour.");
+      nextTurn();
+    } else {
+      // Out of combat (rare), keep chaining death saves
+      refreshInputState();
+      requestRoll({dice:20,mod:0,modLabel:"aucun",type:"death",label:"Jet de mort (suite)",dc:10,advantage:null});
+    }
+    return;
+  }
+
+  var done = {label:p.label, dice:p.dice, mod:p.mod, fr:fr, total:total, succ:succ, isCrit:isCrit, isFmbl:isFmbl, advantage:p.advantage, dc:p.dc};
+  G.pendRoll = null;
+  lockAllDice();
+  refreshInputState();
+  callDM(buildRM(done), true);
+}
+
+function buildRM(r) {
+  var m = "[RESULTAT] "+r.label+": d"+r.dice;
+  if (G.rollsDone.length > 1) m += " ["+G.rollsDone.join(",")+"]->"+r.fr;
+  else m += "->"+r.fr;
+  if (r.mod !== 0) m += " "+(r.mod>=0?"+":"")+r.mod+"="+r.total;
+  if (r.dc != null) m += " vs DD"+r.dc+" -> "+(r.succ?"SUCCES":"ECHEC");
+  if (r.isCrit) m += " [CRITIQUE 2xdes]";
+  if (r.isFmbl) m += " [FUMBLE]";
+  if (r.advantage) m += " ["+(r.advantage==="advantage"?"Avantage":"Desavantage")+"]";
+  return m;
+}
+
+// =============================================
+// COMBAT TRACKER & BATTLE MAP
+// =============================================
+function startCombat(enemies, battleMap, opts) {
+  opts = opts || {};
+  var playerSurprised = !!opts.playerSurprised;
+  var surprisedRefs = opts.surprisedRefs || [];
+  G.inCombat = true;
+  G.combatRound = 1;
+  G.initiative = [];
+  G.currentTurn = 0;
+  // Big visual marker BEFORE everything
+  addMsg("sys", "═══════════════════════");
+  addMsg("cbt", "⚔ ⚔ ⚔  COMBAT ENGAGÉ  ⚔ ⚔ ⚔");
+  addMsg("sys", "═══════════════════════");
+
+  // Helper: roll initiative with optional disadvantage (surprise)
+  function rollInit(mod, surprised) {
+    if (surprised) {
+      var d1 = rRaw(20), d2 = rRaw(20);
+      var lo = Math.min(d1, d2);
+      return {result: lo + mod, detail: "d20["+d1+","+d2+"→"+lo+" SURPRIS]"+(mod>=0?"+":"")+mod+"="+(lo+mod)};
+    }
+    var d = rRaw(20);
+    return {result: d + mod, detail: "d20["+d+"]"+(mod>=0?"+":"")+mod+"="+(d+mod)};
+  }
+
+  // Player init
+  var playerMod = parseInt(G.char.init.replace("+",""));
+  var pr = rollInit(playerMod, playerSurprised);
+  G.initiative.push({name:G.char.nm, init:pr.result, isPlayer:true, isAlly:false, alive:true, ref:"player", surprised:playerSurprised});
+  addMsg("roll", "Initiative "+G.char.nm+(playerSurprised?" (Surpris, désavantage)":"")+" : "+pr.detail);
+
+  // Enemy init
+  enemies.forEach(function(e){
+    var dexMod = (typeof e.dexMod === "number") ? e.dexMod : 0;
+    var enemySurprised = surprisedRefs.indexOf(e.ref) !== -1 || surprisedRefs.indexOf(e.name) !== -1;
+    var enemyInit;
+    if (typeof e.dexMod === "number") {
+      var er = rollInit(dexMod, enemySurprised);
+      enemyInit = er.result;
+      addMsg("roll", "Initiative "+e.name+(e.isAlly?" (allié)":"")+(enemySurprised?" (Surpris)":"")+" : "+er.detail);
+    } else {
+      enemyInit = e.init || 10;
+      addMsg("roll", "Initiative "+e.name+(e.isAlly?" (allié)":"")+" : "+enemyInit);
+    }
+    G.initiative.push({name:e.name, init:enemyInit, isPlayer:false, isAlly:!!e.isAlly, alive:true, ref:e.ref||e.name, surprised:enemySurprised});
+  });
+  G.initiative.sort(function(a,b){
+    // Higher init first; ties: player loses to enemies (more challenging)
+    if (b.init !== a.init) return b.init - a.init;
+    return a.isPlayer ? 1 : -1;
+  });
+  document.getElementById("cbar").classList.add("on");
+  if (battleMap && battleMap.grid) {
+    G.battleMap = battleMap.grid;
+    G.battleMapLegend = battleMap.legend || "P=Vous · E=Ennemi · #=Mur · .=Sol";
+    document.getElementById("bmgrid").textContent = G.battleMap;
+    document.getElementById("bmleg").textContent = G.battleMapLegend;
+    document.getElementById("bmap").classList.add("on");
+  }
+  renderCombatBar();
+  updateTurnIndicator();
+  // Auto-collapse on small screens to keep input visible
+  autoCollapseOnMobile();
+  // Display ordered list
+  var order = G.initiative.map(function(t){return t.name+"("+t.init+")";}).join(" → ");
+  addMsg("cbt", "📋 Ordre d'initiative : "+order);
+  // If player goes first, ensure input is ready
+  var first = G.initiative[0];
+  if (first && first.isPlayer) {
+    addMsg("cbt", "▶ VOUS AGISSEZ EN PREMIER — Décrivez votre action");
+    refreshInputState();
+  } else if (first && first.isAlly) {
+    addMsg("cbt", "🤝 "+first.name+" (allié) agit en premier — touchez 'Jouer ce tour'");
+    showManualNextButton(first);
+  } else {
+    addMsg("cbt", "⏳ "+first.name+" agit en premier — touchez 'Jouer ce tour'");
+    showManualNextButton(first);
+  }
+  // Show the combat button in header (mobile + desktop)
+  document.getElementById("hCombatBtn").classList.add("on");
+  // Auto-open the drawer on mobile to show the player the combat setup
+  if (window.innerWidth <= 600) {
+    document.getElementById("combatDrawer").classList.add("open");
+    document.getElementById("drawerBackdrop").classList.add("on");
+    // Auto-close after 3 seconds so player can read the chat
+    setTimeout(closeDrawer, 3000);
+  }
+}
+
+function endCombat() {
+  G.inCombat = false;
+  G.initiative = [];
+  G.battleMap = null;
+  document.getElementById("cbar").classList.remove("on");
+  document.getElementById("bmap").classList.remove("on");
+  document.getElementById("tind").classList.remove("on");
+  document.getElementById("hCombatBtn").classList.remove("on");
+  closeDrawer();
+  hideManualNextButton();
+  addMsg("cbt", "✓ COMBAT TERMINÉ");
+}
+
+function renderCombatBar() {
+  document.getElementById("cbround").textContent = "Round "+G.combatRound;
+  document.getElementById("drawerRound").textContent = "Round "+G.combatRound;
+  var turns = document.getElementById("cbturns");
+  var drawerTurns = document.getElementById("drawerTurns");
+  turns.innerHTML = "";
+  drawerTurns.innerHTML = "";
+  G.initiative.forEach(function(t, i){
+    // Inline tracker (desktop)
+    var item = document.createElement("div");
+    var cls = "turn-item";
+    if (t.isPlayer) cls += " player";
+    else if (t.isAlly) cls += " player";
+    if (i === G.currentTurn) cls += " active";
+    if (t.dead) cls += " dead";
+    else if (t.downed || t.stabilized) cls += " downed";
+    item.className = cls;
+    var icon = t.isPlayer ? "👤 " : t.isAlly ? "🤝 " : "";
+    var status = "";
+    if (t.dead) status = " ☠";
+    else if (t.stabilized) status = " 💤";
+    else if (t.downed) status = " 🩸";
+    item.textContent = icon + t.name + " (" + t.init + ")" + status;
+    turns.appendChild(item);
+
+    // Drawer tracker (mobile) — bigger and clearer
+    var dItem = document.createElement("div");
+    var dBg = i === G.currentTurn ? "background:var(--pn);color:#fff;" : "background:var(--lt);color:var(--dim);";
+    var dBorder = t.isPlayer || t.isAlly ? "border-color:var(--gl);" : "border-color:var(--br);";
+    var dOpacity = t.dead ? "opacity:.35;text-decoration:line-through;" : (t.downed || t.stabilized) ? "opacity:.55;font-style:italic;" : "";
+    dItem.style.cssText = "padding:8px 10px;border:1px solid var(--br);"+dBg+dBorder+dOpacity+"font-family:'Cinzel',serif;font-size:11px;display:flex;justify-content:space-between;align-items:center;";
+    dItem.innerHTML = '<span>'+icon+t.name+status+'</span><span style="font-size:10px;color:var(--gp)">init '+t.init+'</span>';
+    drawerTurns.appendChild(dItem);
+  });
+}
+
+function updateBattleMap(newGrid, newLegend) {
+  if (newGrid) {
+    G.battleMap = newGrid;
+    document.getElementById("bmgrid").textContent = newGrid;
+    document.getElementById("drawerMapGrid").textContent = newGrid;
+  }
+  if (newLegend) {
+    G.battleMapLegend = newLegend;
+    document.getElementById("bmleg").textContent = newLegend;
+    document.getElementById("drawerMapLegend").textContent = newLegend;
+  }
+}
+
+function toggleDrawer() {
+  var d = document.getElementById("combatDrawer");
+  var b = document.getElementById("drawerBackdrop");
+  if (d.classList.contains("open")) {
+    d.classList.remove("open");
+    b.classList.remove("on");
+  } else {
+    d.classList.add("open");
+    b.classList.add("on");
+  }
+}
+
+function closeDrawer() {
+  document.getElementById("combatDrawer").classList.remove("open");
+  document.getElementById("drawerBackdrop").classList.remove("on");
+}
+
+function updateTurnIndicator() {
+  var ind = document.getElementById("tind");
+  if (!G.inCombat || !G.initiative.length) { ind.classList.remove("on"); return; }
+  var current = G.initiative[G.currentTurn];
+  if (!current) { ind.classList.remove("on"); return; }
+  var cls = "turn-ind on ";
+  if (current.isPlayer) cls += "mine";
+  else if (current.isAlly) cls += "mine"; // allies = green
+  else cls += "foe";
+  ind.className = cls;
+  if (current.isPlayer) ind.textContent = "▶ VOTRE TOUR — Agissez";
+  else if (current.isAlly) ind.textContent = "🤝 Tour de "+current.name+" (allié)";
+  else ind.textContent = "⏳ Tour de "+current.name;
+}
+
+function nextTurn() {
+  if (!G.inCombat) return;
+  // Cancel any pending auto-trigger
+  if (G.autoTurnTimer) { clearTimeout(G.autoTurnTimer); G.autoTurnTimer = null; }
+  var attempts = 0;
+  // Skip dead/stabilized combatants. Player at 0HP but not stabilized = still gets a turn (for death save).
+  function shouldSkip(t) {
+    if (!t) return true;
+    if (t.dead) return true;
+    if (t.stabilized) return true;
+    if (t.isPlayer) {
+      // Player only skipped if dead or stabilized (handled above). At 0HP non-stable: takes turn for death save.
+      return false;
+    }
+    // NPCs/enemies: skip if not alive (covers downed enemies/companions)
+    if (!t.alive) return true;
+    return false;
+  }
+  do {
+    G.currentTurn++;
+    if (G.currentTurn >= G.initiative.length) {
+      G.currentTurn = 0;
+      G.combatRound++;
+    }
+    attempts++;
+    if (attempts > G.initiative.length*2) break;
+  } while (shouldSkip(G.initiative[G.currentTurn]));
+  renderCombatBar();
+  updateTurnIndicator();
+  autoSave();
+  // CRITICAL: when turn advances, decide what happens
+  var curr = G.initiative[G.currentTurn];
+  if (!curr) { refreshInputState(); return; }
+
+  if (curr.isPlayer && !G.pendRoll) {
+    // Player's turn
+    hideManualNextButton();
+    // SPECIAL CASE: player at 0HP, unconscious, not stabilized → trigger death save
+    if (G.hp <= 0 && G.conds.indexOf("Inconscient") !== -1 && G.dSucc < 3 && G.dFail < 3) {
+      addMsg("cbt", "⚠ Vous êtes inconscient — jet de mort (d20 DD10)");
+      requestRoll({dice:20, mod:0, modLabel:"aucun", type:"death", label:"Jet de mort", dc:10, advantage:null});
+      return;
+    }
+    refreshInputState();
+    addMsg("sys", "▶ À votre tour d'agir");
+  } else if (!curr.isPlayer && !G.pendRoll && !G.gameEnded) {
+    // Enemy or ally turn — show manual "Next turn" button instead of auto-triggering
+    refreshInputState();
+    var who = curr.isAlly ? curr.name + " (allié)" : curr.name + " (ennemi)";
+    addMsg("cbt", "⏳ Tour de " + who + " — touchez 'Jouer ce tour' pour continuer");
+    showManualNextButton(curr);
+  }
+}
+
+// Manual next-turn UI control
+function showManualNextButton(curr) {
+  var btn = document.getElementById("manualNextBtn");
+  if (!btn) return;
+  var who = curr.isAlly ? "🤝 " + curr.name + " (allié)" : "⏳ " + curr.name + " (ennemi)";
+  btn.textContent = "▶ Jouer le tour de " + curr.name;
+  btn.style.display = "block";
+  btn.onclick = function() {
+    if (!G.inCombat || G.gameEnded || G.pendRoll) return;
+    var c = G.initiative[G.currentTurn];
+    if (!c || c.isPlayer || !c.alive) { hideManualNextButton(); return; }
+    btn.style.display = "none";
+    callDM("[TOUR AUTO] Joue le tour de " + c.name + (c.isAlly ? " (allié du joueur)" : " (ennemi)") + ". Round " + G.combatRound + ". Decris son action concise (1-2 phrases max) et lance les jets necessaires (attaque, save, etc.). Quand son tour est termine, inclus {\"TURN\":\"next\"} a la fin de ton message.");
+  };
+}
+
+function hideManualNextButton() {
+  var btn = document.getElementById("manualNextBtn");
+  if (btn) btn.style.display = "none";
+}
+
+function killEnemy(name) {
+  // Definitive death (mostly for enemies; for allies/player, prefer markDowned)
+  G.initiative.forEach(function(t){
+    if (t.name === name) {
+      t.alive = false;
+      t.downed = false;
+      t.stabilized = false;
+      t.dead = true;
+    }
+  });
+  renderCombatBar();
+}
+
+function markDowned(name) {
+  // Combatant at 0 HP, unconscious but not dead — skipped in turn order
+  // but still in the initiative roster for narrative purposes
+  G.initiative.forEach(function(t){
+    if (t.name === name) {
+      t.downed = true;
+      t.stabilized = false;
+      t.dead = false;
+      // Keep alive flag false so turn loop skips them; we'll filter via downed too
+      t.alive = false;
+    }
+  });
+  renderCombatBar();
+}
+
+function markStabilized(name) {
+  // Combatant at 0 HP, no longer making death saves, no immediate danger but unconscious
+  G.initiative.forEach(function(t){
+    if (t.name === name) {
+      t.stabilized = true;
+      t.downed = true;
+      t.dead = false;
+      t.alive = false; // still skipped in turn order — they're unconscious
+    }
+  });
+  renderCombatBar();
+}
+
+function revive(name, currentHp) {
+  // Combatant healed back to >0 HP (e.g. by Cure Wounds, Healing Word)
+  G.initiative.forEach(function(t){
+    if (t.name === name) {
+      t.alive = true;
+      t.downed = false;
+      t.stabilized = false;
+      t.dead = false;
+    }
+  });
+  renderCombatBar();
+}
+
+function updateBattleMap_OLD_REMOVED(newGrid, newLegend) {
+  // duplicate removed - the active one is defined earlier in the file
+}
+
+function toggleCbar() {
+  var c = document.getElementById("cbar-content");
+  var t = document.getElementById("cbar-toggle-btn");
+  c.classList.toggle("on");
+  t.textContent = c.classList.contains("on") ? "Tracker ▼" : "Tracker ▶";
+}
+
+function toggleBmap() {
+  var c = document.getElementById("bmap-content");
+  var t = document.getElementById("bmap-toggle-btn");
+  c.classList.toggle("on");
+  t.textContent = c.classList.contains("on") ? "Carte ▼" : "Carte ▶";
+}
+
+// Auto-collapse on small screens to save vertical space
+function autoCollapseOnMobile() {
+  if (window.innerHeight < 700) {
+    var cc = document.getElementById("cbar-content");
+    var bc = document.getElementById("bmap-content");
+    if (cc) cc.classList.remove("on");
+    if (bc) bc.classList.remove("on");
+    var ct = document.getElementById("cbar-toggle-btn");
+    var bt = document.getElementById("bmap-toggle-btn");
+    if (ct) ct.textContent = "Tracker ▶";
+    if (bt) bt.textContent = "Carte ▶";
+  }
+}
+
+// =============================================
+// GAME OVER
+// =============================================
+function gameOver() {
+  G.pendRoll = null;
+  lockAllDice();
+  setInputLocked(true);
+  document.getElementById("inp").disabled = true;
+  document.getElementById("sbtn").disabled = true;
+  // Stop any further DM calls by clearing history tail flag
+  G.gameEnded = true;
+  clearAutoSave();
+  addMsg("sys", "═══════════════════════");
+  addMsg("sys", "  ☠ FIN DE PARTIE ☠");
+  addMsg("sys", "  "+G.char.nm+" est mort");
+  addMsg("sys", "═══════════════════════");
+  // Show restart overlay
+  var ov = document.getElementById("gover");
+  if (!ov) {
+    ov = document.createElement("div");
+    ov.id = "gover";
+    ov.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:300;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;text-align:center;";
+    ov.innerHTML = '<div style="font-family:Cinzel Decorative,cursive;font-size:28px;color:var(--rl);margin-bottom:10px">☠ MORT ☠</div>'
+      + '<div style="font-family:Cinzel,serif;font-size:11px;letter-spacing:3px;color:var(--dim);text-transform:uppercase;margin-bottom:20px">L\'aventure s\'arrête ici</div>'
+      + '<div style="font-size:13px;color:var(--gp);font-style:italic;line-height:1.6;max-width:320px;margin-bottom:24px">Votre personnage a succombé. Les chemins de Hommlet ont eu raison de vous. Mais une autre âme pourrait tenter sa chance...</div>'
+      + '<button onclick="restartGame()" style="font-family:Cinzel,serif;font-size:11px;letter-spacing:2px;text-transform:uppercase;padding:14px 28px;background:var(--gr);border:2px solid var(--gl);color:#fff;cursor:pointer;font-weight:600">⚔ Recommencer une partie</button>';
+    document.body.appendChild(ov);
+  } else {
+    ov.style.display = "flex";
+  }
+}
+
+function restartGame() {
+  clearAutoSave();
+  // Reset everything
+  G.char = null; G.hp = 0; G.hpMax = 0; G.inv = []; G.conds = [];
+  G.notes = ""; G.history = []; G.pendRoll = null; G.rollsDone = []; G.rollCnt = 0;
+  G.spUsed = {1:0}; G.dSucc = 0; G.dFail = 0; G.gold = 0;
+  G.inCombat = false; G.combatRound = 1; G.initiative = []; G.currentTurn = 0;
+  G.battleMap = null; G.battleMapLegend = ""; G.gameEnded = false;
+  G.awaitingReaction = false;
+  selId = null;
+  var ov = document.getElementById("gover");
+  if (ov) ov.style.display = "none";
+  document.getElementById("game").style.display = "none";
+  document.getElementById("log").innerHTML = "";
+  document.getElementById("cbar").classList.remove("on");
+  document.getElementById("bmap").classList.remove("on");
+  document.getElementById("tind").classList.remove("on");
+  document.getElementById("rbnr").classList.remove("on");
+  document.getElementById("hCombatBtn").classList.remove("on");
+  closeDrawer();
+  hideManualNextButton();
+  document.getElementById("inp").disabled = false;
+  document.getElementById("sbtn").disabled = false;
+  refreshInputState();
+  document.getElementById("stbtn").disabled = true;
+  document.querySelectorAll(".cc").forEach(function(x){x.classList.remove("sel");});
+  // Refresh resume section to remove the autosave entry we just cleared
+  renderResumeSection();
+  renderSaveSlots();
+  showScreen("selscreen");
+}
+
+// =============================================
+// SYSTEM PROMPT - STRICT RULES
+// =============================================
+function buildSys() {
+  var c = G.char;
+  var sm = Object.keys(c.stats).map(function(k){return k+"="+c.stats[k]+"("+mS(c.stats[k])+")";}).join(" ");
+  var sv = c.saves.map(function(s){return s.n+s.v+(s.p?"M":"");}).join(" ");
+  var sk = c.skills.map(function(s){return s.n+s.v;}).join(" ");
+  var atk = c.atk.map(function(a){return a.n+a.b+"/"+a.d+(a.note?"("+a.note+")":"");}).join("|");
+  var wm = c.weaponMastery ? c.weaponMastery.map(function(w){return w.n+"="+w.mastery;}).join(",") : "aucune";
+  var spl = "SANS SORTS";
+  if (c.sp) {
+    var empl = (c.sp.sl[1]||0) - (G.spUsed[1]||0);
+    spl = "Sorts("+c.sp.ab+") DD"+c.sp.dc+" att"+c.sp.att
+      + " Empl.1:"+empl+"/"+(c.sp.sl[1]||0)
+      + " Cants:"+c.sp.cants.join("|")
+      + " Prep:"+c.sp.prep.join("|");
+  }
+  var combatInfo = "";
+  if (G.inCombat) {
+    var curr = G.initiative[G.currentTurn];
+    combatInfo = "\n\n=== COMBAT ACTIF ===\nRound "+G.combatRound+" | Tour actuel: "+(curr?curr.name:"?")+(curr&&curr.isPlayer?" (JOUEUR)":" (ENNEMI)")+"\nOrdre: "+G.initiative.filter(function(t){return t.alive;}).map(function(t){return t.name+"("+t.init+")";}).join(" > ");
+  }
+
+  // Build dynamic state block (varies every call — placed AT THE END so static prefix can be cached)
+  // ===CACHE_BOUNDARY=== marker tells the API call code where to split for cache_control
+  var dynamicState = "\n\n===CACHE_BOUNDARY===\n\n=== ETAT COURANT DU PERSONNAGE (mis a jour a chaque tour) ===\n"
+    + c.nm+" | "+c.sub+" | Background: "+c.background+"\n"
+    + "Stats: "+sm+" | PV:"+G.hp+"/"+G.hpMax+" | CA:"+c.ca+" | Init:"+c.init+" | BM:+2\n"
+    + "Saves: "+sv+"\nSkills maitrises: "+sk+"\nAttaques: "+atk+"\n"
+    + "Maitrises d'armes 2024: "+wm+"\n"
+    + spl+"\n"
+    + "Conditions: "+(G.conds.join(",")||"aucune")+"\nInventaire: "+G.inv.slice(0,10).join(", ")+"\nBourse: "+G.gold+" po"
+    + combatInfo;
+  if (G.notes) dynamicState += "\n\nNotes de session (ressources utilisees, etc.):\n"+G.notes;
+
+  return "Tu es Maitre du Jeu solo pour D&D 2024 (SRD 5.2) en mode STRICT. Module N1 francais.\n\n"
+    + "=== MODULE N1 ===\n"+N1+"\n\n"
+    + "=== REGLES D&D 2024 - APPLIQUE A LA LETTRE ===\n"
+    + "Skills: d20+mod+BM(maitrise) vs DD(Facile10/Moyen15/Difficile20/Tres25)\n"
+    + "Attaques: d20+mod+BM vs CA. Critique=20nat(2x des dmg). Fumble=1nat rate auto\n"
+    + "Saves: d20+mod+BM(si proficient)\n"
+    + "Avantage: 2d20 garder plus haut | Desavantage: plus bas\n"
+    + "Sorts: chaque sort niv1+ consomme 1 emplacement (useSlot). Mineurs=illimites\n"
+    + "Maitrise d'arme 2024: applique l'effet (Sap/Slow/Vex/Topple/Nick/Graze/etc) quand le joueur touche\n"
+    + "Combat: initiative une fois au debut. Chacun agit a son tour. PV ENNEMIS CACHES du joueur.\n"
+    + "Ennemis combattent jusqu'a 0PV strict (pas de fuite sauf indication stat block ex: clerc fuit<10PV)\n"
+    + "Mort PJ: 0PV=inconscient, jets stabilisation d20 DD10 sans mod. 3 succes=stable 3 echecs=mort.\n\n"
+    + "=== PROTOCOLE NARRATIF - CRUCIAL ===\n"
+    + "1. NE PAS revealer dans la narration: noms de PNJ non encore presentes, elements du scenario caches, PV exacts des ennemis, motivations cachees. Decouverte progressive uniquement.\n"
+    + "2. JETS seulement apres une DECISION du joueur OU un EVENEMENT du scenario (embuscade, surprise, piege declenche). PAS de jet preventif 'au cas ou'.\n"
+    + "3. Decrire la scene, attendre la reaction du joueur, PUIS demander le jet approprie.\n"
+    + "4. Ne PAS annoncer le nom d'un PNJ avant que le joueur ne le rencontre ou l'apprenne. Utiliser 'le tenancier', 'un homme trapu d'une cinquantaine d'annees', etc.\n"
+    + "5. Les PV des ennemis ne sont JAMAIS reveles. Decrire l'etat par visuel: 'semble legerement blesse', 'halete', 'chancelant', 'tres amoche' (seulement quand proche de 0).\n\n"
+    + "=== EMPLACEMENTS DE SORTS - TRACKING STRICT ABSOLU ===\n"
+    + "ATTENTION CRITIQUE: Les emplacements restants sont indiques ci-dessus (Empl.1:X/Y). Si X=0 le joueur NE PEUT PAS lancer un sort de niveau 1+.\n"
+    + "AVANT chaque sort niv1+ du joueur, tu DOIS verifier: 'le joueur a-t-il encore un emplacement de ce niveau?' Si NON, REFUSE absolument: 'Vous n'avez plus d'emplacement de sort niveau X. Vous pouvez utiliser un sort mineur (cantrip) ou attaquer autrement.'\n"
+    + "Si OUI, lance le sort ET inclus {\"STATE\":{\"useSlot\":1}} dans ta reponse — sans cela l'interface ne decompte pas l'emplacement.\n"
+    + "Les sorts mineurs (cantrips) sont ILLIMITES, ne consomment jamais d'emplacement.\n"
+    + "AUTO-VERIFICATION: regarde la ligne 'Empl.1:X/Y' dans PERSONNAGE. X est le nombre restant. Si tu autorises un sort alors que X=0, c'est une ERREUR CRITIQUE.\n\n"
+    + "=== ECONOMIE D'ACTIONS D&D 2024 - APPLICATION STRICTE ===\n"
+    + "Chaque tour de combat, un combattant a EXACTEMENT:\n"
+    + "  - 1 ACTION (Attaquer, Lancer un sort, Foncer/Dash, Esquiver/Dodge, Se cacher/Hide, Aider/Help, Preparer/Ready, Utiliser un objet, Influencer/Study, Magie)\n"
+    + "  - 1 ACTION BONUS (uniquement si une capacite/sort la permet specifiquement, ex: Second Souffle, Mot de guerison, Attaque a deux armes, sort 'lance comme action bonus')\n"
+    + "  - 1 REACTION (interrompt en dehors de son tour, max 1 entre chaque tour, ex: Coup d'opportunite, Bouclier sort, Riposte)\n"
+    + "  - DEPLACEMENT jusqu'a sa vitesse de base (9m pour humain typique), peut etre fractionne avant/apres l'action\n"
+    + "  - INTERACTION OBJET gratuite (1/tour: degainer une arme, ouvrir une porte non-verrouillee, etc.)\n"
+    + "REGLE STRICTE: un sort lance comme ACTION + un sort lance comme ACTION BONUS dans le meme tour = INTERDIT (sauf si l'action est un cantrip). Le joueur NE PEUT PAS lancer 2 sorts a niveau 1+ dans le meme tour.\n"
+    + "Si le joueur tente 2 actions principales (ex: attaquer ET lancer un sort niv1), REFUSE et explique: 'Vous avez deja utilise votre action ce tour.'\n"
+    + "Si le joueur a deja utilise sa reaction (ex: Bouclier), il NE PEUT PAS l'utiliser a nouveau avant son prochain tour.\n\n"
+    + "*** REGLE CAPITALE - NE JAMAIS OUBLIER ***\n"
+    + "Quand le joueur a fait UNE SEULE chose pendant son tour (par ex. seulement une action bonus comme 'Second Souffle' ou 'Mot de guerison', ou seulement un deplacement), tu DOIS lui RAPPELER ce qu'il lui reste a faire AVANT de passer au tour suivant.\n"
+    + "Exemple : si le joueur dit 'J'utilise mon Second Souffle', tu repondras:\n"
+    + "  1. Resoudre l'action bonus (recuperation des PV)\n"
+    + "  2. Lui demander explicitement : 'Vous avez encore votre ACTION PRINCIPALE et votre DEPLACEMENT (9m). Que faites-vous ?'\n"
+    + "  3. NE PAS inclure {\"TURN\":\"next\"} a la fin — attendre sa decision.\n"
+    + "Inclus {\"TURN\":\"next\"} UNIQUEMENT quand le joueur a :\n"
+    + "  - Explicitement dit qu'il termine son tour ('je passe', 'je termine mon tour', 'fin de tour'), OU\n"
+    + "  - Utilise son action principale ET (eventuellement) son action bonus, OU\n"
+    + "  - Aucune option restante ne fait sens (mais c'est rare au niveau 1).\n"
+    + "Tableau de decision en fin de tour joueur :\n"
+    + "  - Action principale utilisee + action bonus utilisee -> {\"TURN\":\"next\"} OK\n"
+    + "  - Seulement action bonus -> RAPPELER l'action principale, PAS de TURN next\n"
+    + "  - Seulement deplacement -> RAPPELER l'action principale et bonus si dispo, PAS de TURN next\n"
+    + "  - Seulement reaction (Bouclier) hors tour -> ne pas avancer le tour, c'etait une reaction\n\n"
+    + "=== RESSOURCES LIMITEES - DECOMPTE OBLIGATOIRE ===\n"
+    + "Plusieurs capacites ont un nombre d'utilisations limite. Tu DOIS les tracker via {\"STATE\":{\"note\":\"<ressource> utilise X/Y\"}} a chaque usage. Les ressources principales au niv 1:\n"
+    + "  - GUERRIER: Second Souffle = 1/repos court. Une fois utilise, indisponible jusqu'au prochain repos court.\n"
+    + "  - MAGICIEN: Recuperation arcanique = 1/repos long. Recupere des emplacements totalisant <= niveau/2 (1 au niv 1).\n"
+    + "  - CLERC: Canal Divin = 1/repos court (si la sous-classe l'octroie — pas au niveau 1 en 2024 car la sous-classe arrive niv 3, donc pas de Canal au niv 1).\n"
+    + "  - ROUBLARD: Attaque sournoise = 1/TOUR (pas 1/round, donc reset au debut de son prochain tour).\n"
+    + "  - DONS RACIAUX: Halfeline Chanceux = relance illimitee uniquement sur le naturel 1 sur d20. Humain Resolu = 1 relance/repos long.\n"
+    + "AVANT chaque utilisation d'une ressource limitee, tu DOIS verifier dans les notes/historique si elle a deja ete utilisee. Si epuisee, REFUSE et indique: 'Cette capacite est deja utilisee, disponible apres [repos court/long].'\n"
+    + "Quand utilisee, NOTE-LE: {\"STATE\":{\"note\":\"Second Souffle utilise (1/1)\"}}\n"
+    + "Au repos court (1h, narration uniquement, pas en combat), reinitialise les capacites '/repos court' et inclus {\"STATE\":{\"note\":\"Repos court — capacites reinitialisees\"}}\n\n"
+    + "=== PREPARATION DES SORTS D&D 2024 ===\n"
+    + "CLERC: a une LISTE DE SORTS PREPARES (nombre = niveau de classe + SAG mod, soit 5 au niv 1). Au repos long, peut ECHANGER ses sorts prepares. Peut lancer n'importe lequel de ses sorts prepares tant qu'il a un emplacement. La liste indiquee dans 'Prep' ci-dessus est la liste courante.\n"
+    + "MAGICIEN: a un GRIMOIRE (6 sorts niv.1) + une LISTE DE SORTS PREPARES (nombre = niveau + INT mod, soit 5 au niv 1). Au repos long, prepare 5 sorts parmi le grimoire. Peut lancer n'importe lequel de ses sorts prepares tant qu'il a un emplacement. Les sorts RITUELS (comme Identification, marques *) peuvent etre lances sans consommer d'emplacement, en 10 min, s'ils sont dans le grimoire.\n"
+    + "IMPORTANT: Le joueur NE PEUT PAS lancer un sort hors de sa liste preparee (pour le Magicien, le grimoire permet de le preparer au prochain repos long mais pas de le lancer directement).\n"
+    + "SOUS-CLASSES D&D 2024: le Clerc choisit son Domaine au NIVEAU 3, le Magicien son Ecole au NIVEAU 3, le Guerrier son Archetype au NIVEAU 3, le Roublard son Archetype au NIVEAU 3. Au niveau 1, PAS DE SOUS-CLASSE active. Ne pas appliquer de bonus de sous-classe au niveau 1.\n\n"
+    + "=== COMPAGNON PNJ (MODE SOLO) ===\n"
+    + "Le joueur est seul. A l'auberge de Hommlet, propose ACTIVEMENT UN compagnon PNJ selon la REGLE DE COMPLEMENTARITE definie dans l'Acte 1 (complet le profil du joueur : heal pour tank, tank pour fragile, ranged pour melee, etc.). UN SEUL candidat a la fois, pas plusieurs options.\n"
+    + "- Le compagnon a son propre tour d'initiative en combat (tu le joues, en annoncant ce qu'il tente avant de demander les jets si besoin)\n"
+    + "- En combat: inclus-le dans initiative avec name:'<nom>', init:<valeur>, ref:'companion', isAlly:true\n"
+    + "- Ses attaques suivent les memes regles de jets que le joueur (attack puis damage)\n"
+    + "- Si le joueur refuse, n'insiste pas mais laisse l'option ouverte (il pourrait changer d'avis avant de partir)\n\n"
+    + "=== PROTOCOLE COMBAT - STRICT ===\n"
+    + "DECLENCHER un combat: inclure ce JSON (separe de la narration):\n"
+    + '{"COMBAT":{"start":true,"enemies":[{"name":"Bandit A","dexMod":1,"ref":"b1"},{"name":"Bandit B","dexMod":1,"ref":"b2"},{"name":"Garm","dexMod":1,"ref":"garm","isAlly":false}],"battleMap":{"grid":"##########\\n#........#\\n#..P.....#\\n#.C......#\\n#....E...#\\n#........#\\n#..E.....#\\n#........#\\n##########","legend":"P=Vous · C=Compagnon · E=Ennemi · #=Mur · .=Sol"}}}'+"\n"
+    + "IMPORTANT: Pour chaque ennemi, fournir son MODIFICATEUR DE DEX (dexMod) au lieu de l'initiative finale. L'interface roule l'initiative (1d20+dexMod) cote client pour garantir l'equite.\n"
+    + "CRITIQUE - COMPAGNON DANS LE COMBAT: Si le joueur a recrute un compagnon, IL DOIT APPARAITRE dans la liste 'enemies' avec isAlly:true et son dexMod. Exemple: {\"name\":\"Elmo\",\"dexMod\":2,\"ref\":\"elmo\",\"isAlly\":true}. NE PAS oublier le compagnon, sinon il n'apparait pas dans le tracker ni sur la map.\n"
+    + "CRITIQUE - NOMMAGE DES ENNEMIS: Si tu donnes un nom a un ennemi (ex: 'Garm' pour le chef bandit), tu DOIS d'abord le presenter dans la narration AVANT le combat (ex: 'Le plus grand des bandits, balafre, lance un ordre. Ses compagnons l'appellent Garm.'). Sinon, utilise des noms generiques: 'Bandit A', 'Bandit B', 'Chef bandit'.\n"
+    + "CRITIQUE - BATTLE MAP: Inclure 'C' pour le compagnon sur la grille si present. Legend: P=joueur, C=compagnon, E=ennemi.\n"
+    + "Si plusieurs ennemis identiques, nommer 'Lezardien A', 'Lezardien B' pour les distinguer.\n"
+    + "Battle map: grille 10x10 ASCII (# mur, . sol, P joueur, E ennemi, A ou C allie, nombre/lettre pour distinguer si besoin).\n\n"
+    + "=== SURPRISE — REGLES D&D 2024 (APPLICATION OBLIGATOIRE) ===\n"
+    + "En D&D 2024, il N'Y A PLUS DE 'ROUND DE SURPRISE' (regle 2014 obsolete). A la place, les combattants Surpris ont DESAVANTAGE sur leur jet d'initiative.\n"
+    + "** DETECTION AUTO DE SURPRISE ** : avant chaque debut de combat, tu DOIS te poser ces questions :\n"
+    + "  1) Le joueur a-t-il rate son jet de Perception/Survie d'embuscade juste avant le combat? -> playerSurprised:true\n"
+    + "  2) Les ennemis ont-ils ete attaques de maniere furtive (joueur cache, jet de Discretion reussi vs leur Perception)? -> surprisedRefs:[...]\n"
+    + "  3) Y a-t-il eu un guet-apens declenche par un piege/effet narratif? -> appliquer surprise selon qui a ete pris au piege.\n"
+    + "Si une de ces situations est presente, tu DOIS inclure le flag de surprise dans le JSON COMBAT. NE PAS OUBLIER c'est une regle 2024 stricte.\n"
+    + "Format : {\"COMBAT\":{\"start\":true,\"playerSurprised\":true,\"enemies\":[...]}}\n"
+    + "ou : {\"COMBAT\":{\"start\":true,\"surprisedRefs\":[\"ref1\",\"ref2\"],\"enemies\":[...]}}\n"
+    + "L'interface appliquera automatiquement le desavantage a l'initiative des combattants Surpris.\n\n"
+    + "=== ATTAQUE D'OPPORTUNITE — REGLE OBLIGATOIRE 2024 ===\n"
+    + "Quand un combattant quitte la portee d'allonge d'un ennemi adjacent sans utiliser l'action Desengager, l'ennemi peut faire une ATTAQUE D'OPPORTUNITE comme REACTION.\n"
+    + "DECLENCHEMENT AUTO : a chaque fois qu'un combattant se deplace en s'eloignant d'un adversaire au contact, tu DOIS verifier:\n"
+    + "  - L'adversaire a-t-il encore sa Reaction ce round? (Reset au debut de SON prochain tour)\n"
+    + "  - Si OUI : declencher une attaque d'opportunite AUTOMATIQUEMENT (jet d'attaque + degats si touche).\n"
+    + "  - Si l'attaque est contre le JOUEUR : utiliser le mecanisme REACTION pour proposer Bouclier ou esquive si applicable, AVANT de resoudre les degats.\n"
+    + "  - Si l'attaque est par le JOUEUR (ennemi qui fuit son contact) : le joueur peut renoncer ou attaquer. Proposer via REACTION : {\"REACTION\":{\"prompt\":\"Le bandit recule, vous pouvez declencher une attaque d'opportunite (1 attaque avec votre arme de melee). Voulez-vous attaquer ?\"}}\n"
+    + "ACTION DESENGAGER : si un combattant utilise son action Desengager (action principale), il ne provoque PAS d'attaque d'opportunite.\n"
+    + "JAMAIS oublier de proposer/declencher l'attaque d'opportunite, c'est une regle structurelle du combat 2024.\n\n"
+    + "=== CHANGEMENT D'ARME — REGLES D&D 2024 ===\n"
+    + "En D&D 2024, on peut degainer/ranger une arme via l'INTERACTION OBJET GRATUITE (1 par tour, integree au tour).\n"
+    + "Sequence valide :\n"
+    + "  - 1er tour : interaction gratuite = ranger l'epee, puis interaction integree dans l'action Attaquer = degainer l'arbalete -> ATTENDS, en 2024 c'est SIMPLIFIE :\n"
+    + "  - L'action Attaquer en 2024 inclut le fait de degainer/ranger les armes UTILISEES pendant l'attaque sans cout supplementaire. Un combattant peut passer d'une epee a une arbalete pendant son attaque.\n"
+    + "  - Si le combattant veut juste changer d'arme SANS attaquer, c'est l'interaction objet gratuite (1/tour).\n"
+    + "  - Si plusieurs changements dans un meme tour, le 2eme necessite une action complete (\"Utiliser un objet\").\n"
+    + "Quand le joueur change d'arme, NE PAS le penaliser indument. Appliquer simplement la nouvelle arme pour les attaques suivantes (avec sa maitrise specifique : Sap, Slow, Vex, etc.).\n\n"
+    + "=== DEPLACEMENT — MISE A JOUR OBLIGATOIRE DE LA CARTE ===\n"
+    + "CHAQUE fois qu'un combattant se deplace (joueur, compagnon, ennemi), tu DOIS:\n"
+    + "  1. Decrire le mouvement (combien de cases, dans quelle direction, jusqu'a quelle position)\n"
+    + "  2. Inclure {\"COMBAT\":{\"mapUpdate\":\"nouvelle_grille\",\"legend\":\"...\"}} avec la grille mise a jour\n"
+    + "  3. Verifier qu'il y avait un risque d'attaque d'opportunite (cf. section au-dessus)\n"
+    + "INTERDIT : decrire un deplacement sans envoyer mapUpdate. La carte tactique est l'outil principal du joueur pour comprendre le combat.\n"
+    + "DEPLACEMENT EN 2024 :\n"
+    + "  - Vitesse de base = 9m (6 cases si 1 case = 1,5m) pour humain typique\n"
+    + "  - Peut etre fractionne avant/apres l'action\n"
+    + "  - Foncer/Dash = action qui double la vitesse pour le tour\n"
+    + "  - Terrain difficile = chaque case coute 2 cases\n\n"
+    + "=== TOURS STRICTS ===\n"
+    + "A chaque message DURANT LE COMBAT, regarde 'Tour actuel' dans l'etat ci-dessus.\n"
+    + "- L'INTERFACE DECLENCHE AUTOMATIQUEMENT le tour des ennemis et alliés via un message [TOUR AUTO]. Quand tu recois ce message, tu DOIS jouer ce tour.\n"
+    + "- Si c'est au JOUEUR: decris juste l'environnement/situation, ATTENDS sa decision. NE PAS faire agir les ennemis.\n"
+    + "- Si c'est a un ENNEMI ou ALLIE (message [TOUR AUTO]): joue ce tour (decris l'action, roule les attaques avec ROLL), puis inclus {\"TURN\":\"next\"} pour passer au suivant.\n"
+    + "- IMPORTANT: Apres une attaque qui necessite jet d'attaque PUIS jet de degats, tu peux mettre {\"TURN\":\"next\"} APRES le jet de degats (pas entre les deux). Ou tu peux le mettre tout de suite si l'attaque rate.\n"
+    + "- Apres CHAQUE tour termine (joueur OU ennemi): inclus {\"TURN\":\"next\"} pour faire avancer l'ordre d'initiative.\n"
+    + "- Si un ennemi meurt (ses PV tombent a 0 OU moins): inclus {\"COMBAT\":{\"kill\":\"nom_exact\"}}\n"
+    + "- Un ennemi VIVANT (>0PV) continue a combattre STRICTEMENT. Pas de fuite sauf indication explicite du stat block.\n"
+    + "- Mise a jour carte OBLIGATOIRE apres CHAQUE deplacement de combattant: {\"COMBAT\":{\"mapUpdate\":\"nouvelle_grille\",\"legend\":\"...\"}}.\n"
+    + "REGLE ABSOLUE CARTE: la grille DOIT contenir TOUS les combattants vivants (joueur P, compagnon C s'il existe, chaque ennemi avec une lettre/chiffre distinct). Avant chaque mapUpdate, verifier mentalement: 'ma grille contient-elle bien P + tous les ennemis + le compagnon (si present) tous vivants?'. Si un combattant manque, c'est une ERREUR — l'inclure obligatoirement.\n"
+    + "FORMAT IDEAL DE GRILLE: utiliser des lettres distinctes pour chaque combattant (P=joueur, C=compagnon, A/B/C/D pour les ennemis, ou les initiales du nom). Ex: 'P' joueur, 'C' compagnon, 'G' Garm, '1' Bandit A, '2' Bandit B. La legende explique chaque lettre.\n"
+    + "Quand un ennemi meurt: le retirer de la grille dans la prochaine mapUpdate ET emettre {\"COMBAT\":{\"kill\":\"nom_exact\"}}.\n"
+    + "- Fin du combat (tous ennemis morts/fuient): {\"COMBAT\":{\"end\":true}}\n\n"
+    + "=== REACTIONS DU JOUEUR PENDANT TOUR ENNEMI ===\n"
+    + "Certaines actions du joueur sont des REACTIONS qui s'activent hors de son tour : sort Bouclier (annule attaque), Mots cinglants (Barde), Esquive instinctive (Roublard niv5+), Riposte, Coup d'opportunite, etc.\n"
+    + "Quand un ennemi attaque le joueur OU une circonstance permet une reaction (ex: PJ va tomber a 0PV et a Second Souffle, ou PJ peut lancer Bouclier pour annuler une touche), tu DOIS proposer la reaction au joueur AVANT de resoudre l'attaque.\n"
+    + "Pour cela, inclus ce JSON: {\"REACTION\":{\"prompt\":\"Le bandit vous touche. Voulez-vous lancer Bouclier (1 empl niv1, +5 CA jusqu'a fin du prochain tour, peut annuler cette touche) ou subir les degats ?\"}}\n"
+    + "L'interface debloquera l'input pour permettre au joueur de repondre meme pendant un tour ennemi. Tu recevras [REPONSE REACTION JOUEUR] avec sa decision, puis tu continueras le tour de l'ennemi.\n"
+    + "REACTIONS SPECIFIQUES PAR CLASSE :\n"
+    + "  - Magicien : Bouclier (annule projectile magique OU +5 CA reaction)\n"
+    + "  - Tous : Coup d'opportunite si ennemi quitte allonge\n"
+    + "  - Guerrier : Second Souffle (action bonus, pas reaction stricte mais peut sauver de la mort)\n"
+    + "  - Roublard niv5+ : Esquive instinctive (1/2 degats si touche)\n"
+    + "Quand le joueur tombe a 0PV ET qu'il a une option pour eviter (Second Souffle non utilise, Mot de guerison du compagnon, potion accessible), proposer la REACTION avant de declarer Inconscient.\n\n"
+    + "=== PROTOCOLE JETS - RESPECT STRICT ===\n"
+    + "Pour demander un jet, UNIQUEMENT apres action/decision du joueur ou trigger du scenario. Inclure a la FIN du message ce JSON sur UNE SEULE LIGNE:\n"
+    + '{"ROLL":{"dice":20,"mod":3,"modLabel":"SAG+1+BM+2","type":"skill","label":"Perception","dc":14,"advantage":null}}'+"\n"
+    + "Champs: dice(4/6/8/10/12/20/100) mod(entier) modLabel type(skill/attack/save/damage/death/init) label dc(nombre ou null) advantage(advantage/disadvantage/null)\n"
+    + "UN SEUL ROLL par message. Attaque: d'abord ROLL attack, puis si touche ROLL damage au prochain message. JAMAIS decrire le resultat avant le jet.\n\n"
+    + "=== STATE UPDATES ===\n"
+    + '{"STATE":{"hp":X,"addItem":"x","removeItem":"x","addCond":"x","removeCond":"x","useSlot":1,"goldDelta":-5,"note":"x"}}' + "\n"
+    + "ATTENTION CRITIQUE: 'STATE.hp' represente UNIQUEMENT les PV du JOUEUR (le personnage du joueur, jamais le compagnon ni les ennemis). Les PV des autres combattants sont caches et restent dans ta memoire/notes uniquement.\n"
+    + "GESTION INVENTAIRE STRICTE :\n"
+    + "  - Toute action qui CONSOMME une ressource (or paye, potion bue, fleche tiree, repas achete) DOIT etre tracee via STATE.\n"
+    + "  - Pour l'or : utiliser 'goldDelta' avec un nombre signe (-5 pour depenser 5po, +12 pour gagner 12po). Ne pas utiliser 'gold' sauf pour FIXER une valeur exacte.\n"
+    + "  - Pour les objets : utiliser 'removeItem' avec le nom EXACT tel qu'il apparait dans l'inventaire.\n"
+    + "  - Si le joueur n'a PAS la ressource necessaire (pas assez d'or, plus de potions...), refuser l'action et le signaler clairement.\n"
+    + "  - Recompenses du combat : 'addItem' pour les objets, 'goldDelta' pour le butin.\n\n"
+    + "=== ETATS DE COMBAT - JOUEUR / COMPAGNON / ENNEMIS ===\n"
+    + "GAME OVER : se declenche UNIQUEMENT si le JOUEUR (personnage principal) meurt definitivement (3 echecs de jets de mort). La mort d'un compagnon, allie ou PNJ NE DOIT JAMAIS declencher game over.\n"
+    + "QUAND UN ENNEMI tombe a 0PV: inclus {\"COMBAT\":{\"kill\":\"nom_exact\"}} pour le retirer du combat. Ennemis = morts a 0PV (pas de jet de mort).\n"
+    + "QUAND UN COMPAGNON/ALLIE tombe a 0PV: il est INCONSCIENT, pas mort. Inclus {\"COMBAT\":{\"downed\":\"nom_exact\"}}. Il fait alors des jets de mort a son tour (que tu peux jouer en simplifie: lance 1d20, si <10 = echec, si >=10 = succes, 3 echecs = mort, 3 succes = stabilise).\n"
+    + "QUAND UN COMPAGNON/ALLIE EST STABILISE (3 succes de jets de mort OU sort de stabilisation OU soin Medecine reussi): inclus {\"COMBAT\":{\"stabilized\":\"nom_exact\"}}. Il reste inconscient mais n'est plus en danger immediat. Son tour passe (skip) — il n'agit pas en combat tant qu'il n'est pas reveille (sort de soin qui rend >0PV).\n"
+    + "QUAND UN COMPAGNON/ALLIE EST SOIGNE (Mot de guerison, Soins) et revient >0PV: inclus {\"COMBAT\":{\"revive\":\"nom_exact\"}}. Il reprend son tour normalement au prochain round.\n"
+    + "QUAND UN COMPAGNON MEURT (3 echecs de jets de mort ou execute par ennemi): inclus {\"COMBAT\":{\"kill\":\"nom_exact\"}}. Le combat continue avec le joueur seul. PAS de game over.\n"
+    + "REGLE: Un combattant 'downed' ou 'stabilized' ne joue pas son tour (skip auto). Ne lui demande pas d'action.\n\n"
+    + "=== STYLE NARRATIF ===\n"
+    + "Francais immersif. 150-200 mots max par reponse. Tension progressive. Atmosphere oppressante. Description sensorielle (odeurs, sons, textures). Consequences permanentes. PAS DE SPOILER.\n\n"
+    + "=== GESTION DU CONTENU MATURE ===\n"
+    + "Ce jeu est un JDR fantasy classique D&D pour adultes. Les actions du joueur peuvent inclure: combat letal, intimidation, vol, mensonge, interrogatoire de prisonniers, decisions tactiques moralement grises (laisser un blesse, prendre une rancon, etc.). C'est NORMAL en JDR — c'est le PERSONNAGE qui agit, pas le joueur.\n"
+    + "Tu DOIS rester dans ton role de MJ et resoudre l'action via les regles du jeu (jets de DD, consequences narratives, reactions des PNJ), MEME si l'action est moralement ambigue.\n"
+    + "Exemples d'actions parfaitement valides en D&D auxquelles tu DOIS donner suite :\n"
+    + "  - 'Je menace le bandit captif pour qu'il parle' -> jet d'Intimidation, le bandit cede ou non selon le DD\n"
+    + "  - 'Je tue le bandit a terre' -> action narrative directe, decris la scene avec consequences (alignement, reactions PNJ futurs)\n"
+    + "  - 'Je vole le commerce pendant la nuit' -> jets de Discretion/Outils voleur, consequences si rate\n"
+    + "  - 'Je seduis le garde pour passer' -> jet de Persuasion/Tromperie\n"
+    + "Si une demande te semble depasser le cadre JDR (contenu sexuel explicite, violence gratuite envers enfants, etc.), demande UNE REFORMULATION en restant dans ton role de MJ : 'Le MJ leve un sourcil — pourrais-tu reformuler ton intention en termes mecaniques ?'\n"
+    + "NE JAMAIS sortir du role pour refuser. NE JAMAIS dire 'en tant qu'IA' ou 'je ne peux pas'. Tu es le MJ."
+    + dynamicState;
+}
+
+// =============================================
+// API CALL
+// =============================================
+function callDM(msg, isRoll) {
+  if (G.gameEnded) return;
+  var btn = document.getElementById("sbtn");
+  var spin = document.getElementById("spin-row");
+  if (!isRoll) setInputLocked(true);
+  btn.disabled = true;
+  spin.classList.add("on");
+
+  var content = msg==="BEGIN"
+    ? "Commence l'aventure. Le personnage arrive a HOMMLET, village paisible de Furyondy (Greyhawk), pour son premier contrat d'aventurier. Decris l'arrivee en fin d'apres-midi, l'atmosphere rustique mais un peu tendue du village, l'enseigne de l'auberge du Laboureur Accueillant. Pas de jet au depart - laisse le joueur reagir et decider de ses actions (entrer a l'auberge, parler aux villageois, etc.). Respecte l'ACTE 1 : amene naturellement le joueur a rencontrer le compagnon approprie a sa classe (voir REGLE DE COMPLEMENTARITE)."
+    : msg;
+  G.history.push({role:"user", content:content});
+
+  var headers = {"Content-Type":"application/json"};
+  if (API_KEY) {
+    headers["x-api-key"] = API_KEY;
+    headers["anthropic-version"] = "2023-06-01";
+    headers["anthropic-dangerous-direct-browser-access"] = "true";
+  }
+
+  // Build system prompt and split into cacheable prefix + dynamic suffix
+  var fullSys = buildSys();
+  var splitIdx = fullSys.indexOf("===CACHE_BOUNDARY===");
+  var systemBlocks;
+  if (splitIdx > 0) {
+    var staticPart = fullSys.substring(0, splitIdx);
+    var dynamicPart = fullSys.substring(splitIdx + "===CACHE_BOUNDARY===".length);
+    // Cache the static prefix only; dynamic part changes each call so stays uncached
+    systemBlocks = [
+      { type: "text", text: staticPart, cache_control: { type: "ephemeral" } },
+      { type: "text", text: dynamicPart }
+    ];
+  } else {
+    systemBlocks = [
+      { type: "text", text: fullSys, cache_control: { type: "ephemeral" } }
+    ];
+  }
+
+  var modelConfig = MODELS[CURRENT_MODEL] || MODELS["sonnet"];
+  fetch("https://api.anthropic.com/v1/messages", {
+    method:"POST",
+    headers:headers,
+    body:JSON.stringify({
+      model:modelConfig.id,
+      max_tokens:1400,
+      system:systemBlocks,
+      messages:G.history
+    })
+  }).then(function(resp){
+    if (!resp.ok) {
+      return resp.text().then(function(t){
+        var detail = t;
+        try { var j = JSON.parse(t); if (j.error && j.error.message) detail = j.error.message; } catch(e) {}
+        throw new Error("HTTP "+resp.status+" — "+detail.substring(0,200));
+      });
+    }
+    return resp.json();
+  }).then(function(data){
+    var raw = (data.content && data.content[0] && data.content[0].text) ? data.content[0].text : "*(Silence...)*";
+    var clean = raw;
+
+    // ---- TOKEN USAGE TRACKING ----
+    if (data.usage) {
+      var u = data.usage;
+      G.tokens.input += (u.input_tokens || 0);
+      G.tokens.output += (u.output_tokens || 0);
+      G.tokens.cacheCreate += (u.cache_creation_input_tokens || 0);
+      G.tokens.cacheRead += (u.cache_read_input_tokens || 0);
+      G.tokens.calls += 1;
+      updateTokenDisplay();
+    }
+
+    // Helper: extract balanced JSON starting at position
+    function extractJSON(src, startIdx) {
+      var depth = 0, inStr = false, esc = false;
+      for (var i = startIdx; i < src.length; i++) {
+        var ch = src[i];
+        if (esc) { esc = false; continue; }
+        if (ch === "\\") { esc = true; continue; }
+        if (ch === '"') { inStr = !inStr; continue; }
+        if (inStr) continue;
+        if (ch === "{") depth++;
+        else if (ch === "}") { depth--; if (depth === 0) return src.substring(startIdx, i+1); }
+      }
+      return null;
+    }
+
+    // Helper: parse JSON with auto-fix for literal newlines/tabs inside string values
+    // (the LLM often forgets to escape \n in ASCII grids)
+    function safeParseJSON(s) {
+      try { return JSON.parse(s); } catch(e1) {}
+      // Auto-fix: escape literal newlines/tabs/CR INSIDE string values only
+      var fixed = "";
+      var inStr = false, esc = false;
+      for (var i = 0; i < s.length; i++) {
+        var ch = s[i];
+        if (esc) { fixed += ch; esc = false; continue; }
+        if (ch === "\\") { fixed += ch; esc = true; continue; }
+        if (ch === '"') { fixed += ch; inStr = !inStr; continue; }
+        if (inStr) {
+          if (ch === "\n") { fixed += "\\n"; continue; }
+          if (ch === "\r") { fixed += "\\r"; continue; }
+          if (ch === "\t") { fixed += "\\t"; continue; }
+        }
+        fixed += ch;
+      }
+      try { return JSON.parse(fixed); } catch(e2) { console.error("safeParseJSON failed:", e2.message, "input:", s.substring(0,200)); return null; }
+    }
+
+    // Parse ALL JSON blocks starting with specific keys
+    function extractAllBlocks(src, key) {
+      var blocks = [];
+      var searchKey = '{"' + key + '":';
+      var idx = 0;
+      while ((idx = src.indexOf(searchKey, idx)) !== -1) {
+        var block = extractJSON(src, idx);
+        if (block) { blocks.push(block); idx += block.length; }
+        else idx++;
+      }
+      return blocks;
+    }
+
+    // REACTION blocks — unlocks input during enemy turn for player to react
+    var reactionBlocks = extractAllBlocks(clean, "REACTION");
+    reactionBlocks.forEach(function(rb){
+      var parsed = safeParseJSON(rb);
+      if (!parsed || !parsed.REACTION) return;
+      clean = clean.replace(rb, "");
+      G.awaitingReaction = true;
+      var promptText = (typeof parsed.REACTION === "object" && parsed.REACTION.prompt)
+        ? parsed.REACTION.prompt
+        : "Décrivez votre réaction (ou tapez 'passe' pour l'ignorer)";
+      addMsg("cbt", "⚡ RÉACTION POSSIBLE — " + promptText);
+    });
+
+    // COMBAT blocks
+    var combatBlocks = extractAllBlocks(clean, "COMBAT");
+    combatBlocks.forEach(function(cb){
+      var parsed = safeParseJSON(cb);
+      if (!parsed || !parsed.COMBAT) { console.error("COMBAT parse failed for:", cb.substring(0,200)); return; }
+      var cdata = parsed.COMBAT;
+      clean = clean.replace(cb, "");
+      if (cdata.start) startCombat(cdata.enemies, cdata.battleMap, {playerSurprised: cdata.playerSurprised, surprisedRefs: cdata.surprisedRefs});
+      if (cdata.kill) {
+        killEnemy(cdata.kill);
+        addMsg("cbt", "☠ " + cdata.kill + " est mort");
+      }
+      if (cdata.downed) {
+        markDowned(cdata.downed);
+        addMsg("cbt", "🩸 " + cdata.downed + " tombe inconscient (0 PV, jets de mort en cours)");
+      }
+      if (cdata.stabilized) {
+        markStabilized(cdata.stabilized);
+        addMsg("cbt", "💤 " + cdata.stabilized + " est stabilisé (inconscient mais hors danger)");
+      }
+      if (cdata.revive) {
+        revive(cdata.revive);
+        addMsg("cbt", "✨ " + cdata.revive + " revient à lui");
+      }
+      if (cdata.mapUpdate) updateBattleMap(cdata.mapUpdate, cdata.legend);
+      if (cdata.end) endCombat();
+    });
+
+    // TURN advance
+    var turnBlocks = extractAllBlocks(clean, "TURN");
+    turnBlocks.forEach(function(tb){
+      clean = clean.replace(tb, "");
+      if (G.inCombat) nextTurn();
+    });
+
+    // ROLL
+    var rm = clean.match(/\{"ROLL":\{[^}]+\}\}/);
+    if (rm) {
+      var rparsed = safeParseJSON(rm[0]);
+      if (rparsed && rparsed.ROLL) {
+        var rd = rparsed.ROLL;
+        clean = clean.replace(rm[0],"").trim();
+        if (clean) addMsg("dm", clean);
+        G.history.push({role:"assistant", content:raw});
+        autoSave();
+        requestRoll(rd);
+        spin.classList.remove("on");
+        return;
+      } else {
+        console.error("ROLL parse failed:", rm[0]);
+      }
+    }
+
+    // STATE
+    var stateBlocks = extractAllBlocks(clean, "STATE");
+    stateBlocks.forEach(function(s){
+      var parsed = safeParseJSON(s);
+      if (!parsed || !parsed.STATE) return;
+      var u = parsed.STATE;
+      if (u.hp !== undefined) {
+        var oldHp = G.hp;
+        G.hp = Math.max(0, Math.min(G.hpMax, u.hp));
+        document.getElementById("hbhp").textContent = G.hp+"/"+G.hpMax+" PV";
+        // If player healed back above 0, clear unconscious & death saves
+        if (oldHp <= 0 && G.hp > 0) {
+          G.conds = G.conds.filter(function(x){return x !== "Inconscient";});
+          G.dSucc = 0; G.dFail = 0;
+          if (G.initiative[0] && G.initiative[0].isPlayer) {
+            G.initiative[0].downed = false;
+            G.initiative[0].stabilized = false;
+          }
+          renderCombatBar();
+          addMsg("cbt", "✨ Vous reprenez conscience à " + G.hp + " PV !");
+        }
+      }
+      if (u.addItem) {
+        G.inv.push(u.addItem);
+        addMsg("sys", "📦 +"+u.addItem);
+      }
+      if (u.removeItem) {
+        G.inv = G.inv.filter(function(i){return i !== u.removeItem;});
+        addMsg("sys", "📦 −"+u.removeItem);
+      }
+      if (u.addCond && G.conds.indexOf(u.addCond) === -1) G.conds.push(u.addCond);
+      if (u.removeCond) G.conds = G.conds.filter(function(x){return x !== u.removeCond;});
+      if (u.useSlot != null) {
+        var slotLvl = u.useSlot;
+        var total = (G.char.sp && G.char.sp.sl && G.char.sp.sl[slotLvl]) || 0;
+        var used = G.spUsed[slotLvl] || 0;
+        if (used >= total) {
+          addMsg("sys", "⚠️ ERREUR MJ : emplacement niv." + slotLvl + " déjà épuisé (" + used + "/" + total + "). Le sort n'aurait pas dû être autorisé. Vous pouvez signaler au MJ en disant 'Je n'avais plus d'emplacement'.");
+        } else {
+          G.spUsed[slotLvl] = used + 1;
+          addMsg("sys", "✨ Emplacement niv." + slotLvl + " utilisé (" + (used+1) + "/" + total + ")");
+        }
+      }
+      if (u.note) G.notes = G.notes ? G.notes+"\n· "+u.note : "· "+u.note;
+      // Gold tracking
+      if (typeof u.gold === "number") {
+        G.gold = Math.max(0, u.gold);
+        addMsg("sys", "💰 Bourse : "+G.gold+" po");
+      }
+      if (typeof u.goldDelta === "number") {
+        G.gold = Math.max(0, G.gold + u.goldDelta);
+        var sign = u.goldDelta >= 0 ? "+" : "";
+        addMsg("sys", "💰 "+sign+u.goldDelta+" po (total : "+G.gold+" po)");
+      }
+      clean = clean.replace(s,"");
+    });
+
+    var trimmed = clean.trim();
+    addMsg("dm", trimmed);
+    G.history.push({role:"assistant", content:raw});
+    autoSave();
+
+    // Detect refusal: response without any JSON markers AND looks like a content refusal
+    var hasMarker = /\{"(ROLL|STATE|COMBAT|TURN|REACTION)":/.test(raw);
+    var refusalKeywords = /je ne peux pas|je préfère|je n'ai pas la possibilité|inapproprié|je ne suis pas à l'aise|cela dépasse|en tant qu'IA|je vais devoir|reformuler/i;
+    var looksLikeRefusal = !hasMarker && refusalKeywords.test(trimmed) && trimmed.length < 600;
+
+    if (looksLikeRefusal) {
+      addMsg("sys", "⚠ Le MJ a refusé de traiter votre demande");
+      addMsg("cbt", "💡 Astuce : reformulez en termes purement mécaniques RPG (ex: 'Je tente d'intimider' au lieu de descriptions trop crues). Si vous étiez en plein tour ennemi, l'auto-progression du combat reprend dans 2s.");
+      // If we were waiting for an enemy turn to complete, force progression
+      if (G.inCombat && !G.gameEnded) {
+        var curr = G.initiative[G.currentTurn];
+        if (curr && !curr.isPlayer) {
+          // Force-advance the turn after a delay to unblock
+          setTimeout(function() {
+            if (G.inCombat && !G.pendRoll && !G.gameEnded && !G.awaitingReaction) {
+              addMsg("sys", "⏭ Tour passé automatiquement (refus du MJ)");
+              nextTurn();
+            }
+          }, 2000);
+        }
+      }
+    }
+
+    if (G.hp <= 0 && G.conds.indexOf("Mort") === -1 && G.conds.indexOf("Inconscient") === -1) {
+      G.dSucc = 0; G.dFail = 0;
+      G.conds.push("Inconscient");
+      if (G.inCombat) {
+        // In combat: mark player as downed in initiative; death save happens at their turn
+        if (G.initiative[0] && G.initiative[0].isPlayer) {
+          G.initiative[0].downed = true;
+        }
+        renderCombatBar();
+        addMsg("cbt", "⚠ Vous tombez INCONSCIENT à 0 PV. Le combat continue. Votre jet de mort se fera à votre prochain tour.");
+        // If it's currently the player's turn (e.g. they took dmg from a sort), advance turn since they're now unconscious
+        var curT = G.initiative[G.currentTurn];
+        if (curT && curT.isPlayer) {
+          nextTurn();
+        } else {
+          refreshInputState();
+        }
+      } else {
+        // Out of combat: immediate death save chain
+        addMsg("cbt","⚠ INCONSCIENT — Jet de stabilisation requis (d20 DD10 sans mod.)");
+        requestRoll({dice:20, mod:0, modLabel:"aucun", type:"death", label:"Jet de mort", dc:10, advantage:null});
+      }
+      btn.disabled = false;
+      spin.classList.remove("on");
+      return;
+    }
+
+    refreshInputState();
+    btn.disabled = false;
+    spin.classList.remove("on");
+
+  }).catch(function(e){
+    var msg = e.message || "inconnu";
+    addMsg("sys","⚠ Erreur API — " + msg);
+    if (msg.indexOf("500") !== -1 || msg.indexOf("502") !== -1 || msg.indexOf("503") !== -1 || msg.indexOf("529") !== -1) {
+      addMsg("sys","💡 Erreur serveur transitoire. Retape ton dernier message dans 5-10 secondes — le message a été retiré de l'historique pour éviter un blocage.");
+      // Pop the failed user message so the user can retry without history corruption
+      if (G.history.length > 0 && G.history[G.history.length-1].role === "user") {
+        G.history.pop();
+      }
+    } else if (msg.indexOf("429") !== -1) {
+      addMsg("sys","💡 Limite de débit (429). Attends 30-60 secondes avant de retaper ton message.");
+      if (G.history.length > 0 && G.history[G.history.length-1].role === "user") {
+        G.history.pop();
+      }
+    }
+    console.error(e);
+    refreshInputState();
+    btn.disabled = false;
+    spin.classList.remove("on");
+  });
+}
+
+// =============================================
+// INPUT
+// =============================================
+var QA_TEXTS = [
+  "J'observe attentivement mon environnement.",
+  "Je parle a cette personne.",
+  "Je fouille soigneusement.",
+  "J'attaque.",
+  "Je prends un repos court (1 heure).",
+  "Rappelle-moi ma situation et mes ressources actuelles."
+];
+
+["qb0","qb1","qb2","qb3","qb4","qb5"].forEach(function(id, i){
+  var b = document.getElementById(id);
+  if (b) b.onclick = function(){ if (!G.pendRoll) { document.getElementById("inp").value = QA_TEXTS[i]; sendMsg(); } };
+});
+
+document.getElementById("sbtn").onclick = sendMsg;
+
+function sendMsg() {
+  if (G.pendRoll) { addMsg("sys","— Lancez le de requis —"); return; }
+  // In combat, block player input if not their turn — UNLESS a reaction is awaited
+  if (G.inCombat && G.initiative.length && !G.awaitingReaction) {
+    var curr = G.initiative[G.currentTurn];
+    if (curr && !curr.isPlayer) {
+      addMsg("sys","— Ce n'est pas votre tour ("+curr.name+" agit) —");
+      return;
+    }
+  }
+  var inp = document.getElementById("inp");
+  var text = inp.value.trim();
+  if (!text) return;
+  inp.value = "";
+  // If reaction was awaited, mark it consumed and prefix the message
+  if (G.awaitingReaction) {
+    G.awaitingReaction = false;
+    addMsg("pl", "[RÉACTION] " + text);
+    callDM("[REPONSE REACTION JOUEUR] " + text + " — Continue ensuite le tour de l'ennemi/allie en cours.");
+    return;
+  }
+  addMsg("pl", text);
+  autoSave();
+  callDM(text);
+}
+
+document.getElementById("inp").addEventListener("keydown", function(e){
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMsg(); }
+});
+
+// =============================================
+// TOAST
+// =============================================
+function showToast(msg, err) {
+  var t = document.getElementById("tst");
+  t.textContent = msg;
+  t.className = "tst"+(err?" err":"");
+  void t.offsetWidth;
+  t.classList.add("on");
+  setTimeout(function(){t.classList.remove("on");}, 2500);
+}
+
+// =============================================
+// SAVE / LOAD
+// =============================================
+var SK = "n1v8_";
+var SLOTS = 3;
+
+function getLog(){return document.getElementById("log").innerHTML;}
+function setLog(h){var l=document.getElementById("log");l.innerHTML=h;l.scrollTop=l.scrollHeight;}
+
+function saveGame(slot) {
+  if (!G.char) { showToast("Pas de partie", true); return; }
+  try {
+    var dataObj = {
+      s:{hp:G.hp, hpMax:G.hpMax, inv:G.inv, conds:G.conds, notes:G.notes, history:G.history, spUsed:G.spUsed, inCombat:G.inCombat, combatRound:G.combatRound, initiative:G.initiative, currentTurn:G.currentTurn, battleMap:G.battleMap, battleMapLegend:G.battleMapLegend, gold:G.gold},
+      log:getLog(),
+      cid:G.char.id,
+      at:new Date().toLocaleString("fr-FR",{dateStyle:"short",timeStyle:"short"}),
+      t:G.history.filter(function(m){return m.role==="user";}).length
+    };
+    var jsonStr = JSON.stringify(dataObj);
+    var sizeKB = Math.round(jsonStr.length / 1024);
+
+    // Truncate if too large (window.storage limit ~5MB; localStorage ~5-10MB but per-domain)
+    if (jsonStr.length > 4500000) {
+      // Truncate history but keep last 30 messages
+      dataObj.s.history = dataObj.s.history.slice(-30);
+      // Trim log too
+      var logEl = document.getElementById("log");
+      var msgs = logEl.querySelectorAll(".msg");
+      if (msgs.length > 50) {
+        var keepStart = msgs.length - 50;
+        var newLogHTML = "";
+        for (var i = keepStart; i < msgs.length; i++) newLogHTML += msgs[i].outerHTML;
+        dataObj.log = newLogHTML;
+      }
+      jsonStr = JSON.stringify(dataObj);
+      sizeKB = Math.round(jsonStr.length / 1024);
+      addMsg("sys", "⚠ Sauvegarde tronquée (taille originale trop grande)");
+    }
+
+    ST.set(SK+slot, jsonStr).then(function(result){
+      showToast("Sauvegarde "+slot+" OK ("+sizeKB+" Ko)");
+      renderSaveSlots();
+    }).catch(function(err){
+      console.error("Save error:", err);
+      showToast("Erreur save: "+(err && err.message ? err.message.substring(0,50) : "inconnue"), true);
+    });
+  } catch(e) {
+    console.error("Save exception:", e);
+    showToast("Erreur save: "+e.message.substring(0,50), true);
+  }
+}
+
+function loadGame(slot) {
+  ST.get(SK+slot).then(function(r){
+    if (!r || !r.value) { showToast("Slot "+slot+" vide", true); return; }
+    var d;
+    try { d = JSON.parse(r.value); }
+    catch(parseErr) { showToast("Sauvegarde corrompue", true); console.error(parseErr); return; }
+    var ch = CHARS.filter(function(c){return c.id===d.cid;})[0];
+    if (!ch) { showToast("Perso introuvable: "+d.cid, true); return; }
+    G.char = ch;
+    G.hp = d.s.hp; G.hpMax = d.s.hpMax;
+    G.inv = d.s.inv || []; G.conds = d.s.conds || [];
+    G.notes = d.s.notes || ""; G.history = d.s.history || [];
+    G.spUsed = d.s.spUsed || {1:0};
+    G.gold = (typeof d.s.gold === "number") ? d.s.gold : (ch.startGold || 15);
+    G.inCombat = d.s.inCombat || false;
+    G.combatRound = d.s.combatRound || 1;
+    G.initiative = d.s.initiative || [];
+    G.currentTurn = d.s.currentTurn || 0;
+    G.battleMap = d.s.battleMap;
+    G.battleMapLegend = d.s.battleMapLegend || "";
+    G.gameEnded = false;
+    G.awaitingReaction = false;
+    G.pendRoll = null;
+    document.getElementById("selscreen").classList.remove("on");
+    var gEl = document.getElementById("game");
+    gEl.style.display = "flex";
+    gEl.style.flexDirection = "column";
+    document.getElementById("hbhp").textContent = G.hp+"/"+G.hpMax+" PV";
+    setLog(d.log || "");
+    if (G.inCombat) {
+      document.getElementById("cbar").classList.add("on");
+      if (G.battleMap) {
+        document.getElementById("bmgrid").textContent = G.battleMap;
+        document.getElementById("bmleg").textContent = G.battleMapLegend;
+        document.getElementById("drawerMapGrid").textContent = G.battleMap;
+        document.getElementById("drawerMapLegend").textContent = G.battleMapLegend;
+        document.getElementById("bmap").classList.add("on");
+      }
+      document.getElementById("hCombatBtn").classList.add("on");
+      renderCombatBar();
+      updateTurnIndicator();
+    } else {
+      document.getElementById("cbar").classList.remove("on");
+      document.getElementById("bmap").classList.remove("on");
+      document.getElementById("hCombatBtn").classList.remove("on");
+    }
+    lockAllDice();
+    refreshInputState();
+    showToast("Slot "+slot+" chargé ("+G.char.nm+")");
+    renderSaveSlots();
+  }).catch(function(e){
+    console.error("Load error:", e);
+    showToast("Erreur load: "+(e && e.message ? e.message.substring(0,50) : "inconnue"), true);
+  });
+}
+
+function delGame(slot) {
+  ST.del(SK+slot).then(function(){showToast("Efface"); renderSaveSlots();}).catch(function(){});
+}
+
+function openSaveMenu() {
+  document.getElementById("savemodal").classList.add("on");
+  renderSaveSlots();
+}
+
+function renderSaveSlots() {
+  var c = document.getElementById("svmlist");
+  if (!c) return;
+  var ig = !!G.char;
+  var promises = [];
+  for (var s=1; s<=SLOTS; s++) promises.push(ST.get(SK+s));
+  Promise.all(promises).then(function(results){
+    c.innerHTML = "";
+    results.forEach(function(r, idx){
+      var slot = idx+1;
+      var div = document.createElement("div");
+      div.className = "svmslot";
+      var d = null;
+      try { if (r && r.value) d = JSON.parse(r.value); } catch(e) {}
+      if (d) {
+        var nm = "";
+        var found = CHARS.filter(function(ch){return ch.id===d.cid;});
+        if (found.length) nm = found[0].nm;
+        div.innerHTML = '<div class="svmsname">Slot '+slot+' — '+nm+'</div>'
+          + '<div class="svmsmeta">'+(d.at||"")+' · '+(d.t||0)+' tours</div>'
+          + '<div class="svmsbtns">'
+          + '<button class="svmsb svmsb-save" onclick="saveGame('+slot+');renderSaveSlots()" '+(ig?"":"disabled")+'>💾 Écraser</button>'
+          + '<button class="svmsb svmsb-load" onclick="loadGame('+slot+');document.getElementById(\'savemodal\').classList.remove(\'on\')">📂 Charger</button>'
+          + '<button class="svmsb svmsb-del" onclick="delGame('+slot+')">🗑 Effacer</button>'
+          + '</div>';
+      } else {
+        div.innerHTML = '<div class="svmsname">Slot '+slot+'</div>'
+          + '<div class="svmsem">— vide —</div>'
+          + '<div class="svmsbtns">'
+          + '<button class="svmsb svmsb-save" onclick="saveGame('+slot+');renderSaveSlots()" '+(ig?"":"disabled")+'>💾 Sauver</button>'
+          + '<button class="svmsb svmsb-load" disabled>📂 Charger</button>'
+          + '<button class="svmsb svmsb-del" disabled>🗑 Effacer</button>'
+          + '</div>';
+      }
+      c.appendChild(div);
+    });
+  }).catch(function(){});
+}
+
+// =============================================
+// BOOT
+// =============================================
+init();
+</script>
+</body>
+</html>
