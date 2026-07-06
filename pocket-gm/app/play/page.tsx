@@ -118,6 +118,7 @@ export default function PlayPage() {
   const [cbCollapsed, setCbCollapsed] = useState(false)
   const [bmCollapsed, setBmCollapsed] = useState(false)
   const [showManualNext, setShowManualNext] = useState<InitiativeEntry | null>(null)
+  const [inlineError, setInlineError] = useState<string | null>(null)
 
   const gRef = useRef(g)
   const logRef = useRef(log)
@@ -131,7 +132,7 @@ export default function PlayPage() {
   useEffect(() => { loadingRef.current = loading }, [loading])
 
   // scroll log to bottom
-  useEffect(() => { if (logEl.current) logEl.current.scrollTop = logEl.current.scrollHeight }, [log])
+  useEffect(() => { if (logEl.current) logEl.current.scrollTop = logEl.current.scrollHeight }, [log, loading, inlineError])
 
   // toast auto-dismiss
   useEffect(() => {
@@ -583,6 +584,7 @@ export default function PlayPage() {
     } catch (e) {
       const msg = (e as Error).message || 'inconnu'
       addMsg('sys', `⚠ Erreur API — ${msg}`)
+      setInlineError('Something went wrong — try again')
       if (/500|502|503|529/.test(msg)) {
         addMsg('sys', '💡 Erreur serveur transitoire. Retapez votre dernier message dans 5-10 secondes.')
         updateG(prev => {
@@ -615,6 +617,7 @@ export default function PlayPage() {
     const text = inputText.trim()
     if (!text) return
     setInputText('')
+    setInlineError(null)
     if (cur.awaitingReaction) {
       updateG(prev => ({ ...prev, awaitingReaction: false }))
       addMsg('pl', `[RÉACTION] ${text}`)
@@ -1028,9 +1031,18 @@ export default function PlayPage() {
             </div>
           ))}
           {loading && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 0' }}>
-              <div style={{ width: '16px', height: '16px', border: '2px solid #3a3020', borderTop: '2px solid #c9952a', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-              <span style={{ fontFamily: "'Cinzel', serif", fontSize: '9px', color: '#7a6840' }}>Le MJ réfléchit...</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 0' }}>
+              <span style={{ fontFamily: "'Cinzel', serif", fontSize: '9px', color: '#7a6840' }}>Le MJ réfléchit</span>
+              <div style={{ display: 'flex', gap: '3px', alignItems: 'center' }}>
+                {[0, 1, 2].map(i => (
+                  <div key={i} style={{ width: '4px', height: '4px', borderRadius: '50%', background: '#c9952a', animation: `pulse 1.2s ease-in-out ${i * 0.4}s infinite` }} />
+                ))}
+              </div>
+            </div>
+          )}
+          {inlineError && !loading && (
+            <div style={{ fontFamily: "'Cinzel', serif", fontSize: '10px', color: '#ff8070', padding: '6px 0', letterSpacing: '0.5px' }}>
+              ⚠ {inlineError}
             </div>
           )}
         </div>
@@ -1168,6 +1180,7 @@ export default function PlayPage() {
 
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes pulse { 0%, 60%, 100% { opacity: 0.2; } 30% { opacity: 1; } }
       `}</style>
     </div>
   )
