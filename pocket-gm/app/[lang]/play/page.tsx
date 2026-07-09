@@ -1,11 +1,16 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
+import { Suspense, useState, useEffect, useRef, useCallback } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { CHARS } from '@/lib/game/characters'
 import { extractAllBlocks, safeParseJSON } from '@/lib/game/protocol'
+import { getSpecies, getClasses, getBackgrounds, ABILITY_LABELS } from '@/lib/game/srd-data'
+import { CAMPAIGNS } from '@/lib/game/campaigns'
+import { useLang } from '@/lib/i18n/use-lang'
+import { getDictionary, fmt, type Dictionary } from '@/lib/i18n/get-dictionary'
+import type { Lang } from '@/lib/i18n/config'
 import type { PendingRoll, InitiativeEntry, TokenUsage, Character, DynamicStateForAPI } from '@/lib/types'
+import type { SpeciesData, ClassData, BackgroundData } from '@/lib/game/srd-types'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -44,18 +49,9 @@ interface G {
   tokens: TokenUsage
 }
 
-const QA_TEXTS = [
-  "J'observe attentivement mon environnement.",
-  'Je parle a cette personne.',
-  'Je fouille soigneusement.',
-  "J'attaque.",
-  'Je prends un repos court (1 heure).',
-  'Rappelle-moi ma situation et mes ressources actuelles.',
-]
-
 function mS(v: number) { const m = Math.floor((v - 10) / 2); return m >= 0 ? `+${m}` : `${m}` }
 function rRaw(s: number) { return Math.floor(Math.random() * s) + 1 }
-function fmt(t: string) {
+function fmtLog(t: string) {
   return t
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
@@ -64,7 +60,7 @@ function fmt(t: string) {
 
 const defaultG = (): G => ({
   char: null, hp: 0, hpMax: 0, inv: [], conds: [], notes: '', gold: 0,
-  history: [], spUsed: { 1: 0 }, dSucc: 0, dFail: 0,
+  history: [], spUsed: {}, dSucc: 0, dFail: 0,
   pendRoll: null, rollsDone: [], rollCnt: 0,
   inCombat: false, combatRound: 1, initiative: [], currentTurn: 0,
   battleMap: null, battleMapLegend: '', awaitingReaction: false, gameEnded: false,
@@ -76,7 +72,7 @@ const defaultG = (): G => ({
 interface SlotData { cid: string; s: Omit<G, 'char' | 'pendRoll' | 'rollsDone' | 'rollCnt' | 'awaitingReaction' | 'gameEnded' | 'tokens'>; log: LogMsg[]; at: string; t: number }
 
 async function apiSave(slot: number, cid: string, g: G, log: LogMsg[]) {
-  const body: SlotData = { cid, s: { hp: g.hp, hpMax: g.hpMax, inv: g.inv, conds: g.conds, notes: g.notes, gold: g.gold, history: g.history, spUsed: g.spUsed, dSucc: g.dSucc, dFail: g.dFail, inCombat: g.inCombat, combatRound: g.combatRound, initiative: g.initiative, currentTurn: g.currentTurn, battleMap: g.battleMap, battleMapLegend: g.battleMapLegend }, log, at: new Date().toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }), t: g.history.filter(m => m.role === 'user').length }
+  const body: SlotData = { cid, s: { hp: g.hp, hpMax: g.hpMax, inv: g.inv, conds: g.conds, notes: g.notes, gold: g.gold, history: g.history, spUsed: g.spUsed, dSucc: g.dSucc, dFail: g.dFail, inCombat: g.inCombat, combatRound: g.combatRound, initiative: g.initiative, currentTurn: g.currentTurn, battleMap: g.battleMap, battleMapLegend: g.battleMapLegend }, log, at: new Date().toLocaleString(), t: g.history.filter(m => m.role === 'user').length }
   await fetch('/api/saves', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ slot, characterId: cid, state: body, logHtml: null, turnCount: body.t }) })
 }
 
@@ -98,12 +94,31 @@ async function apiLoadAll(): Promise<{ slot: number; data: SlotData }[]> {
   return json.saves.map((s: { slot: number; state: SlotData }) => ({ slot: s.slot, data: s.state }))
 }
 
+async function fetchCharacter(id: string): Promise<Character | null> {
+  const res = await fetch(`/api/characters/${id}`)
+  if (!res.ok) return null
+  const json = await res.json()
+  return json.character || null
+}
+
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 export default function PlayPage() {
+  return (
+    <Suspense fallback={null}>
+      <PlayPageInner />
+    </Suspense>
+  )
+}
+
+function PlayPageInner() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const lang = useLang()
+  const dict = getDictionary(lang)
+  const dp = dict.play
+
   const [phase, setPhase] = useState<Phase>('select')
-  const [selId, setSelId] = useState<string | null>(null)
   const [g, setG] = useState<G>(defaultG())
   const [log, setLog] = useState<LogMsg[]>([])
   const [msgCounter, setMsgCounter] = useState(0)
@@ -131,20 +146,21 @@ export default function PlayPage() {
   useEffect(() => { msgCntRef.current = msgCounter }, [msgCounter])
   useEffect(() => { loadingRef.current = loading }, [loading])
 
-  // scroll log to bottom
   useEffect(() => { if (logEl.current) logEl.current.scrollTop = logEl.current.scrollHeight }, [log, loading, inlineError])
 
-  // toast auto-dismiss
   useEffect(() => {
     if (!toast) return
     const t = setTimeout(() => setToast(null), 2500)
     return () => clearTimeout(t)
   }, [toast])
 
-  // load saves list on mount and when entering select phase
   useEffect(() => {
     if (phase === 'select') { apiLoadAll().then(setAllSaves).catch(() => {}) }
   }, [phase])
+
+  const charId = searchParams.get('charId')
+  const initializing = !!charId && phase === 'select'
+  const charIdHandledRef = useRef<string | null>(null)
 
   // ── helpers ──────────────────────────────────────────────────────────────
 
@@ -155,28 +171,10 @@ export default function PlayPage() {
   const addMsg = useCallback((type: LogMsg['type'], text: string, cls?: string) => {
     const msg: LogMsg = { id: nextId(), type, text, cls }
     setLog(prev => [...prev, msg])
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const updateG = (updater: (prev: G) => G) => {
     setG(prev => { const next = updater(prev); gRef.current = next; return next })
-  }
-
-  // ── Game start ────────────────────────────────────────────────────────────
-
-  function startGame() {
-    const c = CHARS.find(x => x.id === selId)
-    if (!c) return
-    const startGold = c.eq.reduce((acc, item) => {
-      const m = item.match(/^(\d+)\s*po$/)
-      return m ? acc + parseInt(m[1]) : acc
-    }, 0)
-    const fresh = defaultG()
-    fresh.char = c; fresh.hp = c.hp; fresh.hpMax = c.hp; fresh.inv = [...c.eq]
-    fresh.gold = startGold || 15; fresh.spUsed = { 1: 0 }
-    setG(fresh); gRef.current = fresh
-    setLog([]); setPhase('play')
-    setTimeout(() => callDM('BEGIN', false, fresh), 50)
   }
 
   // ── Combat ────────────────────────────────────────────────────────────────
@@ -188,7 +186,7 @@ export default function PlayPage() {
     function rollInit(mod: number, surprised: boolean) {
       if (surprised) {
         const d1 = rRaw(20), d2 = rRaw(20), lo = Math.min(d1, d2)
-        return { result: lo + mod, detail: `d20[${d1},${d2}→${lo} SURPRIS]${mod >= 0 ? '+' : ''}${mod}=${lo + mod}` }
+        return { result: lo + mod, detail: `d20[${d1},${d2}→${lo} ${dp.rollBanner.disadvantage.toUpperCase()}]${mod >= 0 ? '+' : ''}${mod}=${lo + mod}` }
       }
       const d = rRaw(20)
       return { result: d + mod, detail: `d20[${d}]${mod >= 0 ? '+' : ''}${mod}=${d + mod}` }
@@ -197,10 +195,10 @@ export default function PlayPage() {
     updateG(prev => {
       const c = prev.char!
       const initiative: InitiativeEntry[] = []
-      const playerMod = parseInt(c.init.replace('+', ''))
+      const playerMod = mS(c.dex).startsWith('+') ? parseInt(mS(c.dex)) : parseInt(mS(c.dex))
       const pr = rollInit(playerMod, playerSurprised)
-      initiative.push({ name: c.nm, init: pr.result, isPlayer: true, isAlly: false, alive: true, ref: 'player', surprised: playerSurprised })
-      addMsg('roll', `Initiative ${c.nm}${playerSurprised ? ' (Surpris, désavantage)' : ''} : ${pr.detail}`)
+      initiative.push({ name: c.name, init: pr.result, isPlayer: true, isAlly: false, alive: true, ref: 'player', surprised: playerSurprised })
+      addMsg('roll', `${dict.newGame.review.initiative} ${c.name}${playerSurprised ? ` (${dp.rollBanner.disadvantage})` : ''} : ${pr.detail}`)
 
       enemies.forEach(e => {
         const dexMod = typeof e.dexMod === 'number' ? e.dexMod : 0
@@ -209,10 +207,10 @@ export default function PlayPage() {
         if (typeof e.dexMod === 'number') {
           const er = rollInit(dexMod, enemySurprised)
           enemyInit = er.result
-          addMsg('roll', `Initiative ${e.name}${e.isAlly ? ' (allié)' : ''}${enemySurprised ? ' (Surpris)' : ''} : ${er.detail}`)
+          addMsg('roll', `${dict.newGame.review.initiative} ${e.name}${e.isAlly ? ` (${dp.combatMsgs.allySuffix.trim()})` : ''}${enemySurprised ? ` (${dp.rollBanner.disadvantage})` : ''} : ${er.detail}`)
         } else {
           enemyInit = e.init || 10
-          addMsg('roll', `Initiative ${e.name}${e.isAlly ? ' (allié)' : ''} : ${enemyInit}`)
+          addMsg('roll', `${dict.newGame.review.initiative} ${e.name} : ${enemyInit}`)
         }
         initiative.push({ name: e.name, init: enemyInit, isPlayer: false, isAlly: !!e.isAlly, alive: true, ref: e.ref || e.name, surprised: enemySurprised })
       })
@@ -220,21 +218,21 @@ export default function PlayPage() {
       initiative.sort((a, b) => b.init !== a.init ? b.init - a.init : a.isPlayer ? 1 : -1)
 
       addMsg('sys', '═══════════════════════')
-      addMsg('cbt', '⚔ ⚔ ⚔  COMBAT ENGAGÉ  ⚔ ⚔ ⚔')
+      addMsg('cbt', dp.combatMsgs.engaged)
       addMsg('sys', '═══════════════════════')
       const order = initiative.map(t => `${t.name}(${t.init})`).join(' → ')
-      addMsg('cbt', `📋 Ordre d'initiative : ${order}`)
+      addMsg('cbt', fmt(dp.combatMsgs.order, { order }))
 
       const first = initiative[0]
-      if (first?.isPlayer) addMsg('cbt', '▶ VOUS AGISSEZ EN PREMIER — Décrivez votre action')
-      else if (first?.isAlly) { addMsg('cbt', `🤝 ${first.name} (allié) agit en premier`); setShowManualNext(first) }
-      else { addMsg('cbt', `⏳ ${first?.name} agit en premier`); setShowManualNext(first) }
+      if (first?.isPlayer) addMsg('cbt', dp.combatMsgs.playerFirst)
+      else if (first?.isAlly) { addMsg('cbt', fmt(dp.combatMsgs.allyFirst, { name: first.name })); setShowManualNext(first) }
+      else { addMsg('cbt', fmt(dp.combatMsgs.enemyFirst, { name: first?.name || '' })); setShowManualNext(first) }
 
       return {
         ...prev,
         inCombat: true, combatRound: 1, initiative, currentTurn: 0,
         battleMap: battleMap?.grid || null,
-        battleMapLegend: battleMap?.legend || 'P=Vous · E=Ennemi · #=Mur · .=Sol',
+        battleMapLegend: battleMap?.legend || 'P/E/#/.',
       }
     })
   }
@@ -242,37 +240,21 @@ export default function PlayPage() {
   function endCombat() {
     updateG(prev => ({ ...prev, inCombat: false, initiative: [], battleMap: null }))
     setShowManualNext(null)
-    addMsg('cbt', '✓ COMBAT TERMINÉ')
+    addMsg('cbt', dp.combatMsgs.ended)
   }
 
   function killEnemy(name: string) {
-    updateG(prev => ({
-      ...prev,
-      initiative: prev.initiative.map(t => t.name === name ? { ...t, alive: false, dead: true } : t),
-    }))
+    updateG(prev => ({ ...prev, initiative: prev.initiative.map(t => t.name === name ? { ...t, alive: false, dead: true } : t) }))
   }
-
   function markDowned(name: string) {
-    updateG(prev => ({
-      ...prev,
-      initiative: prev.initiative.map(t => t.name === name ? { ...t, downed: true } : t),
-    }))
+    updateG(prev => ({ ...prev, initiative: prev.initiative.map(t => t.name === name ? { ...t, downed: true } : t) }))
   }
-
   function markStabilized(name: string) {
-    updateG(prev => ({
-      ...prev,
-      initiative: prev.initiative.map(t => t.name === name ? { ...t, stabilized: true, downed: false } : t),
-    }))
+    updateG(prev => ({ ...prev, initiative: prev.initiative.map(t => t.name === name ? { ...t, stabilized: true, downed: false } : t) }))
   }
-
   function revive(name: string) {
-    updateG(prev => ({
-      ...prev,
-      initiative: prev.initiative.map(t => t.name === name ? { ...t, downed: false, stabilized: false, alive: true } : t),
-    }))
+    updateG(prev => ({ ...prev, initiative: prev.initiative.map(t => t.name === name ? { ...t, downed: false, stabilized: false, alive: true } : t) }))
   }
-
   function updateBattleMap(grid: string, legend: string) {
     updateG(prev => ({ ...prev, battleMap: grid, battleMapLegend: legend }))
   }
@@ -294,15 +276,15 @@ export default function PlayPage() {
       if (curr) {
         if (curr.isPlayer) {
           setShowManualNext(null)
-          addMsg('cbt', `▶ [Round ${combatRound}] VOTRE TOUR — Décrivez votre action`)
-          if (prev.hp <= 0 && prev.conds.includes('Inconscient')) {
+          addMsg('cbt', fmt(dp.combatMsgs.yourTurn, { round: combatRound }))
+          if (prev.hp <= 0 && prev.conds.includes('down')) {
             setTimeout(() => {
-              addMsg('cbt', '⚠ Jet de mort requis (0 PV)')
-              requestRoll({ dice: 20, mod: 0, modLabel: 'aucun', type: 'death', label: 'Jet de mort', dc: 10, advantage: null })
+              addMsg('cbt', dp.combatMsgs.deathSaveRequired)
+              requestRoll({ dice: 20, mod: 0, modLabel: '', type: 'death', label: dp.combatMsgs.deathSaveRequired, dc: 10, advantage: null })
             }, 50)
           }
         } else {
-          addMsg('cbt', `⏳ Tour de ${curr.name}${curr.isAlly ? ' (allié)' : ''}`)
+          addMsg('cbt', fmt(dp.combatMsgs.turnOf, { name: curr.name, ally: curr.isAlly ? dp.combatMsgs.allySuffix : '' }))
           setShowManualNext(curr)
         }
       }
@@ -314,8 +296,8 @@ export default function PlayPage() {
     const curr = gRef.current.initiative[gRef.current.currentTurn]
     if (!curr) return
     setShowManualNext(null)
-    const prefix = curr.isAlly ? '[TOUR AUTO - ALLIÉ]' : '[TOUR AUTO - ENNEMI]'
-    callDM(`${prefix} C'est le tour de ${curr.name}. Joue ce tour.`, false)
+    const prefix = curr.isAlly ? dp.autoTurnAlly : dp.autoTurnEnemy
+    callDM(`${prefix} ${fmt(dp.autoTurnPlaying, { name: curr.name })}`, false)
   }
 
   // ── Roll engine ───────────────────────────────────────────────────────────
@@ -332,7 +314,7 @@ export default function PlayPage() {
 
     if (newRolls.length < cur.rollCnt) {
       updateG(prev => ({ ...prev, rollsDone: newRolls }))
-      addMsg('roll', `d${sides} → ${r} (1er jet, relancez)`)
+      addMsg('roll', `d${sides} → ${r}`)
       return
     }
 
@@ -347,26 +329,26 @@ export default function PlayPage() {
     let cls = ''
     if (isCrit) cls = 'crit'; else if (isFmbl) cls = 'fmbl'; else if (succ === true) cls = 'ok'; else if (succ === false) cls = 'fail'
     const rs = newRolls.length > 1 ? `[${newRolls.join(',')}]→${fr}` : `→${fr}`
-    const dc = p.dc != null ? (succ ? ' ✓' : ' ✗') + ` DD${p.dc}` : ''
-    const prefix = isCrit ? 'CRITIQUE ! ' : isFmbl ? 'FUMBLE ! ' : ''
+    const dcLabel = p.dc != null ? (succ ? ' ✓' : ' ✗') + ` ${fmt(dp.rollBanner.dc, { dc: p.dc })}` : ''
+    const prefix = isCrit ? 'CRIT! ' : isFmbl ? 'FUMBLE! ' : ''
     const modPart = p.mod !== 0 ? `${p.mod > 0 ? '+' : ''}${p.mod}=${total}` : ''
-    addMsg('roll', `${prefix}d${sides} ${rs}${modPart}${dc}`, cls)
+    addMsg('roll', `${prefix}d${sides} ${rs}${modPart}${dcLabel}`, cls)
 
     if (p.type === 'death') {
       if (fr === 20) {
         updateG(prev => {
-          const conds = prev.conds.filter(x => x !== 'Inconscient')
+          const conds = prev.conds.filter(x => x !== 'down')
           return { ...prev, hp: 1, dSucc: 0, dFail: 0, conds, pendRoll: null, rollsDone: [] }
         })
-        addMsg('cbt', '20 NATUREL sur jet de mort ! Vous revenez à 1 PV, conscient.')
+        addMsg('cbt', dp.combatMsgs.natural20)
         if (gRef.current.inCombat) setTimeout(nextTurn, 50)
         return
       }
       const updatedSucc = isFmbl ? cur.dSucc : (succ ? cur.dSucc + 1 : cur.dSucc)
       const updatedFail = isFmbl ? cur.dFail + 2 : (succ ? cur.dFail : cur.dFail + 1)
-      addMsg('cbt', `Stabilisation : ${updatedSucc}/3 ✓  ${updatedFail}/3 ✗`)
+      addMsg('cbt', fmt(dp.combatMsgs.stabilization, { s: updatedSucc, f: updatedFail }))
       if (updatedSucc >= 3) {
-        addMsg('sys', '— Stabilisé (0 PV mais vivant) —')
+        addMsg('sys', dp.combatMsgs.stabilized)
         updateG(prev => ({ ...prev, dSucc: 0, dFail: 0, pendRoll: null, rollsDone: [] }))
         if (gRef.current.inCombat) setTimeout(nextTurn, 50)
         return
@@ -374,10 +356,10 @@ export default function PlayPage() {
       if (updatedFail >= 3) { gameOver(); return }
       updateG(prev => ({ ...prev, dSucc: updatedSucc, dFail: updatedFail, pendRoll: null, rollsDone: [] }))
       if (gRef.current.inCombat) {
-        addMsg('sys', 'Vous restez à 0 PV (inconscient). Prochain jet de mort à votre prochain tour.')
+        addMsg('sys', dp.combatMsgs.stayAt0)
         setTimeout(nextTurn, 50)
       } else {
-        setTimeout(() => requestRoll({ dice: 20, mod: 0, modLabel: 'aucun', type: 'death', label: 'Jet de mort (suite)', dc: 10, advantage: null }), 50)
+        setTimeout(() => requestRoll({ dice: 20, mod: 0, modLabel: '', type: 'death', label: dp.combatMsgs.deathSaveRequired, dc: 10, advantage: null }), 50)
       }
       return
     }
@@ -389,26 +371,33 @@ export default function PlayPage() {
   }
 
   function buildRM(r: { label: string; dice: number; mod: number; fr: number; total: number; succ: boolean | null; isCrit: boolean; isFmbl: boolean; advantage: string | null; dc: number | null }, rolls: number[]) {
-    let m = `[RESULTAT] ${r.label}: d${r.dice}`
+    let m = `[RESULT] ${r.label}: d${r.dice}`
     if (rolls.length > 1) m += ` [${rolls.join(',')}]->${r.fr}`
     else m += `->${r.fr}`
     if (r.mod !== 0) m += ` ${r.mod >= 0 ? '+' : ''}${r.mod}=${r.total}`
-    if (r.dc != null) m += ` vs DD${r.dc} -> ${r.succ ? 'SUCCES' : 'ECHEC'}`
-    if (r.isCrit) m += ' [CRITIQUE 2xdes]'
+    if (r.dc != null) m += ` vs DC${r.dc} -> ${r.succ ? 'SUCCESS' : 'FAILURE'}`
+    if (r.isCrit) m += ' [CRITICAL]'
     if (r.isFmbl) m += ' [FUMBLE]'
-    if (r.advantage) m += ` [${r.advantage === 'advantage' ? 'Avantage' : 'Desavantage'}]`
+    if (r.advantage) m += ` [${r.advantage}]`
     return m
   }
 
   // ── API call ──────────────────────────────────────────────────────────────
 
+  function buildBeginMessage(character: Character): string {
+    const campaign = CAMPAIGNS.find(c => c.id === character.campaign)
+    return fmt(dp.begin.instruction, {
+      name: character.name,
+      campaign: campaign ? campaign.name[lang] : '',
+      blurb: campaign ? campaign.description[lang] : '',
+    })
+  }
+
   async function callDM(msg: string, isRoll: boolean, overrideG?: G) {
     const cur = overrideG || gRef.current
     if (cur.gameEnded) return
 
-    const content = msg === 'BEGIN'
-      ? "Commence l'aventure. Le personnage arrive a HOMMLET, village paisible de Furyondy (Greyhawk), pour son premier contrat d'aventurier. Decris l'arrivee en fin d'apres-midi, l'atmosphere rustique mais un peu tendue du village, l'enseigne de l'auberge du Laboureur Accueillant. Pas de jet au depart - laisse le joueur reagir et decider de ses actions (entrer a l'auberge, parler aux villageois, etc.). Respecte l'ACTE 1 : amene naturellement le joueur a rencontrer le compagnon approprie a sa classe (voir REGLE DE COMPLEMENTARITE)."
-      : msg
+    const content = msg === 'BEGIN' ? buildBeginMessage(cur.char!) : msg
 
     const newHistory = [...cur.history, { role: 'user' as const, content }]
     updateG(prev => ({ ...prev, history: newHistory }))
@@ -424,7 +413,7 @@ export default function PlayPage() {
       const res = await fetch('/api/game/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: newHistory, characterId: cur.char!.id, dynamicState }),
+        body: JSON.stringify({ messages: newHistory, characterId: cur.char!.id, dynamicState, lang }),
       })
 
       if (!res.ok) {
@@ -435,7 +424,7 @@ export default function PlayPage() {
       }
 
       const data = await res.json()
-      const raw: string = data.content || '*(Silence...)*'
+      const raw: string = data.content || '*...*'
       let clean = raw
 
       if (data.usage) {
@@ -452,7 +441,6 @@ export default function PlayPage() {
         }))
       }
 
-      // REACTION blocks
       const reactionBlocks = extractAllBlocks(clean, 'REACTION')
       reactionBlocks.forEach(rb => {
         const parsed = safeParseJSON(rb)
@@ -460,11 +448,9 @@ export default function PlayPage() {
         clean = clean.replace(rb, '')
         updateG(prev => ({ ...prev, awaitingReaction: true }))
         const rd = parsed.REACTION as { prompt?: string }
-        const promptText = rd.prompt || 'Décrivez votre réaction (ou tapez \'passe\' pour l\'ignorer)'
-        addMsg('cbt', `⚡ RÉACTION POSSIBLE — ${promptText}`)
+        addMsg('cbt', fmt(dp.combatMsgs.reactionPossible, { prompt: rd.prompt || '' }))
       })
 
-      // COMBAT blocks
       const combatBlocks = extractAllBlocks(clean, 'COMBAT')
       combatBlocks.forEach(cb => {
         const parsed = safeParseJSON(cb)
@@ -477,22 +463,20 @@ export default function PlayPage() {
           mapUpdate?: string; legend?: string; end?: boolean
         }
         if (cdata.start) startCombat(cdata.enemies || [], cdata.battleMap || null, { playerSurprised: cdata.playerSurprised, surprisedRefs: cdata.surprisedRefs })
-        if (cdata.kill) { killEnemy(cdata.kill); addMsg('cbt', `☠ ${cdata.kill} est mort`) }
-        if (cdata.downed) { markDowned(cdata.downed); addMsg('cbt', `🩸 ${cdata.downed} tombe inconscient (0 PV, jets de mort en cours)`) }
-        if (cdata.stabilized) { markStabilized(cdata.stabilized); addMsg('cbt', `💤 ${cdata.stabilized} est stabilisé (inconscient mais hors danger)`) }
-        if (cdata.revive) { revive(cdata.revive); addMsg('cbt', `✨ ${cdata.revive} revient à lui`) }
+        if (cdata.kill) { killEnemy(cdata.kill); addMsg('cbt', fmt(dp.combatMsgs.enemyDied, { name: cdata.kill })) }
+        if (cdata.downed) { markDowned(cdata.downed); addMsg('cbt', fmt(dp.combatMsgs.allyDowned, { name: cdata.downed })) }
+        if (cdata.stabilized) { markStabilized(cdata.stabilized); addMsg('cbt', fmt(dp.combatMsgs.allyStabilized, { name: cdata.stabilized })) }
+        if (cdata.revive) { revive(cdata.revive); addMsg('cbt', fmt(dp.combatMsgs.allyRevived, { name: cdata.revive })) }
         if (cdata.mapUpdate) updateBattleMap(cdata.mapUpdate, cdata.legend || '')
         if (cdata.end) endCombat()
       })
 
-      // TURN blocks
       const turnBlocks = extractAllBlocks(clean, 'TURN')
       turnBlocks.forEach(tb => {
         clean = clean.replace(tb, '')
         if (gRef.current.inCombat) setTimeout(nextTurn, 50)
       })
 
-      // ROLL block
       const rm = clean.match(/\{"ROLL":\{[^}]+\}\}/)
       if (rm) {
         const rparsed = safeParseJSON(rm[0])
@@ -508,7 +492,6 @@ export default function PlayPage() {
         }
       }
 
-      // STATE blocks
       const stateBlocks = extractAllBlocks(clean, 'STATE')
       stateBlocks.forEach(s => {
         const parsed = safeParseJSON(s)
@@ -519,30 +502,33 @@ export default function PlayPage() {
         }
         clean = clean.replace(s, '')
         updateG(prev => {
-          let next = { ...prev }
+          const next = { ...prev }
           if (u.hp !== undefined) {
             const oldHp = next.hp
             next.hp = Math.max(0, Math.min(next.hpMax, u.hp))
             if (oldHp <= 0 && next.hp > 0) {
-              next.conds = next.conds.filter(x => x !== 'Inconscient')
+              next.conds = next.conds.filter(x => x !== 'down')
               next.dSucc = 0; next.dFail = 0
-              addMsg('cbt', `✨ Vous reprenez conscience à ${next.hp} PV !`)
+              addMsg('cbt', fmt(dp.combatMsgs.regainConscious, { hp: next.hp }))
             }
           }
-          if (u.addItem) { next.inv = [...next.inv, u.addItem]; addMsg('sys', `📦 +${u.addItem}`) }
-          if (u.removeItem) { next.inv = next.inv.filter(i => i !== u.removeItem); addMsg('sys', `📦 −${u.removeItem}`) }
+          if (u.addItem) { next.inv = [...next.inv, u.addItem]; addMsg('sys', fmt(dp.combatMsgs.itemGain, { item: u.addItem })) }
+          if (u.removeItem) { next.inv = next.inv.filter(i => i !== u.removeItem); addMsg('sys', fmt(dp.combatMsgs.itemLoss, { item: u.removeItem })) }
           if (u.addCond && !next.conds.includes(u.addCond)) next.conds = [...next.conds, u.addCond]
           if (u.removeCond) next.conds = next.conds.filter(x => x !== u.removeCond)
           if (u.useSlot != null) {
             const lv = u.useSlot
-            const total = (next.char?.sp?.sl[lv]) || 0
+            const total = (next.char?.spell_slots?.[lv]) || 0
             const used = next.spUsed[lv] || 0
-            if (used >= total) addMsg('sys', `⚠️ ERREUR MJ : emplacement niv.${lv} déjà épuisé (${used}/${total}).`)
-            else { next.spUsed = { ...next.spUsed, [lv]: used + 1 }; addMsg('sys', `✨ Emplacement niv.${lv} utilisé (${used + 1}/${total})`) }
+            if (used >= total) addMsg('sys', fmt(dp.combatMsgs.slotError, { lv, used, total }))
+            else { next.spUsed = { ...next.spUsed, [lv]: used + 1 }; addMsg('sys', fmt(dp.combatMsgs.slotUsed, { lv, used: used + 1, total })) }
           }
           if (u.note) { next.notes = next.notes ? next.notes + '\n· ' + u.note : '· ' + u.note }
-          if (typeof u.gold === 'number') { next.gold = Math.max(0, u.gold); addMsg('sys', `💰 Bourse : ${next.gold} po`) }
-          if (typeof u.goldDelta === 'number') { next.gold = Math.max(0, next.gold + u.goldDelta); addMsg('sys', `💰 ${u.goldDelta >= 0 ? '+' : ''}${u.goldDelta} po (total : ${next.gold} po)`) }
+          if (typeof u.gold === 'number') { next.gold = Math.max(0, u.gold); addMsg('sys', fmt(dp.combatMsgs.purse, { gold: next.gold })) }
+          if (typeof u.goldDelta === 'number') {
+            next.gold = Math.max(0, next.gold + u.goldDelta)
+            addMsg('sys', fmt(dp.combatMsgs.goldDelta, { sign: u.goldDelta >= 0 ? '+' : '', delta: u.goldDelta, gold: next.gold }))
+          }
           return next
         })
       })
@@ -553,47 +539,44 @@ export default function PlayPage() {
       updateG(prev => ({ ...prev, history: [...prev.history, { role: 'assistant', content: raw }] }))
       autoSave()
 
-      // Refusal detection
       const hasMarker = /\{"(ROLL|STATE|COMBAT|TURN|REACTION)":/.test(raw)
-      const refusalKeywords = /je ne peux pas|je préfère|je n'ai pas la possibilité|inapproprié|je ne suis pas à l'aise|cela dépasse|en tant qu'IA|je vais devoir|reformuler/i
+      const refusalKeywords = /i cannot|i can't|i won't|i'm not comfortable|as an ai|i'd rather|je ne peux pas|je préfère|en tant qu'ia/i
       const looksLikeRefusal = !hasMarker && refusalKeywords.test(trimmed) && trimmed.length < 600
       if (looksLikeRefusal) {
-        addMsg('sys', '⚠ Le MJ a refusé de traiter votre demande')
-        addMsg('cbt', '💡 Astuce : reformulez en termes purement mécaniques RPG.')
+        addMsg('sys', dp.combatMsgs.dmRefused)
+        addMsg('cbt', dp.combatMsgs.dmRefusedTip)
         const curG = gRef.current
         if (curG.inCombat && !curG.gameEnded) {
           const curr = curG.initiative[curG.currentTurn]
-          if (curr && !curr.isPlayer) setTimeout(() => { if (gRef.current.inCombat && !gRef.current.pendRoll) { addMsg('sys', '⏭ Tour passé automatiquement (refus du MJ)'); nextTurn() } }, 2000)
+          if (curr && !curr.isPlayer) setTimeout(() => { if (gRef.current.inCombat && !gRef.current.pendRoll) { addMsg('sys', dp.combatMsgs.turnAutoSkipped); nextTurn() } }, 2000)
         }
       }
 
-      // Player at 0 HP
       const curG = gRef.current
-      if (curG.hp <= 0 && !curG.conds.includes('Mort') && !curG.conds.includes('Inconscient')) {
-        updateG(prev => ({ ...prev, dSucc: 0, dFail: 0, conds: [...prev.conds, 'Inconscient'] }))
+      if (curG.hp <= 0 && !curG.conds.includes('dead') && !curG.conds.includes('down')) {
+        updateG(prev => ({ ...prev, dSucc: 0, dFail: 0, conds: [...prev.conds, 'down'] }))
         if (curG.inCombat) {
-          addMsg('cbt', '⚠ Vous tombez INCONSCIENT à 0 PV. Le combat continue. Votre jet de mort se fera à votre prochain tour.')
+          addMsg('cbt', dp.combatMsgs.fallUnconscious)
           const cur = curG.initiative[curG.currentTurn]
           if (cur?.isPlayer) setTimeout(nextTurn, 50)
         } else {
-          addMsg('cbt', '⚠ INCONSCIENT — Jet de stabilisation requis (d20 DD10 sans mod.)')
-          setTimeout(() => requestRoll({ dice: 20, mod: 0, modLabel: 'aucun', type: 'death', label: 'Jet de mort', dc: 10, advantage: null }), 50)
+          addMsg('cbt', dp.combatMsgs.unconsciousOutOfCombat)
+          setTimeout(() => requestRoll({ dice: 20, mod: 0, modLabel: '', type: 'death', label: dp.combatMsgs.deathSaveRequired, dc: 10, advantage: null }), 50)
         }
       }
-
     } catch (e) {
-      const msg = (e as Error).message || 'inconnu'
-      addMsg('sys', `⚠ Erreur API — ${msg}`)
-      setInlineError('Something went wrong — try again')
+      const msg = (e as Error).message || 'unknown'
+      addMsg('sys', fmt(dp.errors.api, { msg }))
+      setInlineError(dp.errors.tryAgain)
       if (/500|502|503|529/.test(msg)) {
-        addMsg('sys', '💡 Erreur serveur transitoire. Retapez votre dernier message dans 5-10 secondes.')
+        addMsg('sys', dp.errors.transient)
         updateG(prev => {
           const h = [...prev.history]
           if (h.length > 0 && h[h.length - 1].role === 'user') h.pop()
           return { ...prev, history: h }
         })
       } else if (/429/.test(msg)) {
-        addMsg('sys', '💡 Limite de débit (429). Attendez 30-60 secondes.')
+        addMsg('sys', dp.errors.rateLimit)
         updateG(prev => {
           const h = [...prev.history]
           if (h.length > 0 && h[h.length - 1].role === 'user') h.pop()
@@ -605,14 +588,46 @@ export default function PlayPage() {
     }
   }
 
+  // ── Game start ────────────────────────────────────────────────────────────
+
+  function startGame(character: Character) {
+    const startGold = character.equipment.filter(i => i.name === 'Gold Pieces').reduce((acc, i) => acc + i.quantity, 0)
+    const inv = character.equipment
+      .filter(i => i.name !== 'Gold Pieces')
+      .map(i => `${i.quantity > 1 ? `${i.quantity}x ` : ''}${i.name}${i.notes ? ` (${i.notes})` : ''}`)
+    const spUsed: Record<number, number> = {}
+    if (character.spell_slots) Object.keys(character.spell_slots).forEach(lv => { spUsed[Number(lv)] = 0 })
+
+    const fresh = defaultG()
+    fresh.char = character
+    fresh.hp = character.hp_max; fresh.hpMax = character.hp_max
+    fresh.inv = inv; fresh.gold = startGold
+    fresh.spUsed = spUsed
+    setG(fresh); gRef.current = fresh
+    setLog([]); setPhase('play')
+    setTimeout(() => callDM('BEGIN', false, fresh), 50)
+  }
+
+  // fresh character coming from the wizard
+  useEffect(() => {
+    if (!charId || charIdHandledRef.current === charId) return
+    charIdHandledRef.current = charId
+    fetchCharacter(charId).then(character => {
+      if (character) startGame(character)
+      else showToast(fmt(dp.toast.charNotFound, { id: charId }), true)
+      router.replace(`/${lang}/play`)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [charId])
+
   // ── Send message ──────────────────────────────────────────────────────────
 
   function sendMsg() {
     const cur = gRef.current
-    if (cur.pendRoll) { addMsg('sys', '— Lancez le dé requis —'); return }
+    if (cur.pendRoll) { addMsg('sys', dp.combatMsgs.rollFirst); return }
     if (cur.inCombat && cur.initiative.length && !cur.awaitingReaction) {
       const curr = cur.initiative[cur.currentTurn]
-      if (curr && !curr.isPlayer) { addMsg('sys', `— Ce n'est pas votre tour (${curr.name} agit) —`); return }
+      if (curr && !curr.isPlayer) { addMsg('sys', fmt(dp.combatMsgs.notYourTurn, { name: curr.name })); return }
     }
     const text = inputText.trim()
     if (!text) return
@@ -620,8 +635,8 @@ export default function PlayPage() {
     setInlineError(null)
     if (cur.awaitingReaction) {
       updateG(prev => ({ ...prev, awaitingReaction: false }))
-      addMsg('pl', `[RÉACTION] ${text}`)
-      callDM(`[REPONSE REACTION JOUEUR] ${text} — Continue ensuite le tour de l'ennemi/allie en cours.`, false)
+      addMsg('pl', text)
+      callDM(`${dp.reactionResponse} ${text} — ${dp.reactionContinue}`, false)
       return
     }
     addMsg('pl', text)
@@ -639,30 +654,30 @@ export default function PlayPage() {
 
   async function saveGame(slot: number) {
     const cur = gRef.current
-    if (!cur.char) { showToast('Pas de partie', true); return }
+    if (!cur.char) { showToast(dp.toast.noGame, true); return }
     try {
       await apiSave(slot, cur.char.id, cur, logRef.current)
-      showToast(`Sauvegarde ${slot} OK`)
+      showToast(fmt(dp.toast.saveOk, { slot }))
       const updated = await apiLoadAll()
       setAllSaves(updated)
     } catch (e) {
-      showToast(`Erreur: ${(e as Error).message.substring(0, 50)}`, true)
+      showToast(fmt(dp.toast.error, { msg: (e as Error).message.substring(0, 50) }), true)
     }
   }
 
   async function loadGame(slot: number) {
     try {
       const result = await apiLoad(slot)
-      if (!result) { showToast(`Slot ${slot} vide`, true); return }
+      if (!result) { showToast(fmt(dp.toast.slotEmpty, { slot }), true); return }
       const d = result.data
-      const ch = CHARS.find(c => c.id === d.cid)
-      if (!ch) { showToast(`Personnage introuvable: ${d.cid}`, true); return }
+      const ch = await fetchCharacter(d.cid)
+      if (!ch) { showToast(fmt(dp.toast.charNotFound, { id: d.cid }), true); return }
       const restored = defaultG()
       restored.char = ch; restored.hp = d.s.hp; restored.hpMax = d.s.hpMax
       restored.inv = d.s.inv || []; restored.conds = d.s.conds || []
       restored.notes = d.s.notes || ''; restored.history = d.s.history || []
-      restored.spUsed = d.s.spUsed || { 1: 0 }
-      restored.gold = typeof d.s.gold === 'number' ? d.s.gold : 15
+      restored.spUsed = d.s.spUsed || {}
+      restored.gold = typeof d.s.gold === 'number' ? d.s.gold : 0
       restored.inCombat = d.s.inCombat || false
       restored.combatRound = d.s.combatRound || 1
       restored.initiative = d.s.initiative || []
@@ -673,15 +688,15 @@ export default function PlayPage() {
       setLog(d.log || [])
       setPhase('play')
       setShowSaves(false)
-      showToast(`Slot ${slot} chargé (${ch.nm})`)
+      showToast(fmt(dp.toast.slotLoaded, { slot, name: ch.name }))
     } catch (e) {
-      showToast(`Erreur load: ${(e as Error).message.substring(0, 50)}`, true)
+      showToast(fmt(dp.toast.loadError, { msg: (e as Error).message.substring(0, 50) }), true)
     }
   }
 
   async function delGame(slot: number) {
     await apiDelete(slot)
-    showToast('Effacé')
+    showToast(dp.toast.deleted)
     const updated = await apiLoadAll()
     setAllSaves(updated)
   }
@@ -690,8 +705,8 @@ export default function PlayPage() {
 
   function gameOver() {
     updateG(prev => ({ ...prev, gameEnded: true }))
-    addMsg('cbt', '💀 MORT — Votre personnage est mort.')
-    addMsg('sys', '═══════════ GAME OVER ═══════════')
+    addMsg('cbt', dp.combatMsgs.death)
+    addMsg('sys', dp.combatMsgs.gameOver)
   }
 
   async function abandonGame() {
@@ -702,10 +717,8 @@ export default function PlayPage() {
   async function signOut() {
     const supabase = createClient()
     await supabase.auth.signOut()
-    router.push('/login')
+    router.push(`/${lang}/login`)
   }
-
-  // ── Token cost display ────────────────────────────────────────────────────
 
   function tokenLabel(t: TokenUsage) {
     const total = t.input + t.output + t.cacheCreate + t.cacheRead
@@ -714,10 +727,7 @@ export default function PlayPage() {
     return `🪙 ${k}k`
   }
 
-  // ── Input lock helpers ────────────────────────────────────────────────────
-
-  function isInputLocked() {
-    const cur = gRef.current
+  function isInputLockedFor(cur: G): boolean {
     if (loading) return true
     if (cur.pendRoll) return true
     if (cur.gameEnded) return true
@@ -739,207 +749,45 @@ export default function PlayPage() {
     hbtn: { fontFamily: "'Cinzel', serif", fontSize: '9px', letterSpacing: '1px', padding: '5px 9px', background: 'transparent', border: '1px solid #3a3020', color: '#b8a878', cursor: 'pointer', borderRadius: '2px' },
   }
 
-  // ── Render: character sheet ───────────────────────────────────────────────
-
-  function SheetModal() {
-    const c = g.char; if (!c) return null
-    const pct = Math.max(0, g.hp / g.hpMax * 100)
-    const bc = pct > 50 ? '#2a6b3a' : pct > 25 ? '#c9952a' : '#9b2318'
-    const styl = { fontFamily: "'Cinzel', serif", fontSize: '8px', letterSpacing: '2px', color: '#b8a878', textTransform: 'uppercase' as const, marginTop: '12px', marginBottom: '4px' }
-    return (
-      <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 200, overflowY: 'auto', padding: '16px' }} onClick={e => { if (e.target === e.currentTarget) setShowSheet(false) }}>
-        <div style={{ background: '#1a1610', border: '1px solid #3a3020', maxWidth: '500px', margin: '0 auto', padding: '16px', position: 'relative' }}>
-          <button onClick={() => setShowSheet(false)} style={{ position: 'absolute', top: '8px', right: '8px', background: 'transparent', border: '1px solid #3a3020', color: '#7a6840', cursor: 'pointer', padding: '4px 8px', fontFamily: "'Cinzel', serif", fontSize: '9px' }}>✕ Fermer</button>
-          <div style={{ fontFamily: "'Cinzel Decorative', cursive", fontSize: '14px', color: '#c9952a', marginBottom: '2px' }}>{c.nm}</div>
-          <div style={{ fontFamily: "'Cinzel', serif", fontSize: '8px', color: '#c8392b', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '8px' }}>{c.sub}</div>
-          <div style={{ fontSize: '10px', color: '#b8a878', background: 'rgba(255,255,255,0.02)', border: '1px solid #3a3020', padding: '6px', marginBottom: '8px' }}>📜 Background : {c.background} — {c.bgDesc}</div>
-
-          <div style={styl}>Caractéristiques</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: '4px', marginBottom: '8px' }}>
-            {(Object.keys(c.stats) as Array<keyof typeof c.stats>).map(k => (
-              <div key={k} style={{ background: '#241f17', border: '1px solid #3a3020', padding: '4px', textAlign: 'center' }}>
-                <div style={{ fontFamily: "'Cinzel', serif", fontSize: '6px', color: '#7a6840' }}>{k}</div>
-                <div style={{ fontSize: '14px', fontWeight: 600 }}>{c.stats[k]}</div>
-                <div style={{ fontSize: '10px', color: '#c9952a' }}>{mS(c.stats[k])}</div>
-              </div>
-            ))}
-          </div>
-
-          <div style={styl}>PV · CA · Init · BM</div>
-          <div style={{ marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontFamily: "'Cinzel', serif", fontSize: '9px', color: '#7a6840' }}>PV</span>
-            <span style={{ fontSize: '14px', fontWeight: 600 }}>{g.hp} / {g.hpMax}</span>
-          </div>
-          <div style={{ height: '6px', background: '#241f17', border: '1px solid #3a3020', marginBottom: '8px' }}>
-            <div style={{ height: '100%', width: `${pct}%`, background: bc, transition: 'width 0.3s' }} />
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '4px', marginBottom: '8px' }}>
-            {[['CA', String(c.ca)], ['INIT', c.init], ['BM', '+2']].map(([l, v]) => (
-              <div key={l} style={{ background: '#241f17', border: '1px solid #3a3020', padding: '6px', textAlign: 'center' }}>
-                <div style={{ fontFamily: "'Cinzel', serif", fontSize: '6px', color: '#7a6840' }}>{l}</div>
-                <div style={{ fontSize: '14px', fontWeight: 600, color: l === 'BM' ? '#c9952a' : '#f0ead8' }}>{v}</div>
-              </div>
-            ))}
-          </div>
-
-          {g.conds.length > 0 && (<><div style={styl}>Conditions</div><div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '8px' }}>{g.conds.map(c => <span key={c} style={{ background: 'rgba(155,35,24,0.2)', border: '1px solid #c8392b', color: '#ff8070', padding: '2px 6px', fontSize: '10px', fontFamily: "'Cinzel', serif" }}>{c}</span>)}</div></>)}
-
-          {c.sp && (
-            <>
-              <div style={styl}>Emplacements de sorts</div>
-              {Object.keys(c.sp.sl).map(lv => {
-                const tot = c.sp!.sl[+lv]; const used = g.spUsed[+lv] || 0
-                return (
-                  <div key={lv} style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
-                    <span style={{ fontFamily: "'Cinzel', serif", fontSize: '8px', color: '#7a6840' }}>Niv.{lv}:</span>
-                    {Array.from({ length: tot }).map((_, i) => <div key={i} style={{ width: '12px', height: '12px', borderRadius: '50%', background: i < used ? '#241f17' : '#c9952a', border: '1px solid #3a3020' }} />)}
-                    <span style={{ fontFamily: "'Cinzel', serif", fontSize: '8px', color: '#7a6840' }}>{tot - used}/{tot}</span>
-                  </div>
-                )
-              })}
-              <div style={styl}>Sorts mineurs (illimités)</div>
-              <ul style={{ paddingLeft: '16px', fontSize: '11px', color: '#b8a878', lineHeight: 1.7, marginBottom: '8px' }}>{c.sp.cants.map(s => <li key={s}>{s}</li>)}</ul>
-              <div style={styl}>Sorts préparés</div>
-              <ul style={{ paddingLeft: '16px', fontSize: '11px', color: '#b8a878', lineHeight: 1.7, marginBottom: '8px' }}>{c.sp.prep.map(s => <li key={s}>{s}</li>)}</ul>
-            </>
-          )}
-
-          <div style={styl}>Attaques</div>
-          <ul style={{ paddingLeft: '16px', fontSize: '11px', color: '#b8a878', lineHeight: 1.8, marginBottom: '8px' }}>
-            {c.atk.map(a => <li key={a.n}><strong>{a.n}</strong> {a.b} → {a.d}{a.note ? <em style={{ color: '#7a6840' }}> ({a.note})</em> : ''}</li>)}
-          </ul>
-
-          <div style={styl}>Inventaire</div>
-          <div style={{ fontFamily: "'Cinzel', serif", fontSize: '11px', color: '#e8d090', marginBottom: '4px' }}>💰 Bourse : <strong>{g.gold} po</strong></div>
-          <ul style={{ paddingLeft: '16px', fontSize: '11px', color: '#b8a878', lineHeight: 1.7, marginBottom: '8px' }}>{g.inv.map(i => <li key={i}>{i}</li>)}</ul>
-
-          <div style={styl}>Capacités</div>
-          <div style={{ fontSize: '11px', color: '#b8a878', lineHeight: 1.7, marginBottom: '8px' }}>{c.feats.map(f => <div key={f} style={{ marginBottom: '3px' }}>{f}</div>)}</div>
-
-          {g.notes && (<><div style={styl}>Notes</div><div style={{ fontSize: '10px', color: '#7a6840', fontStyle: 'italic' }}>{g.notes}</div></>)}
-        </div>
-      </div>
-    )
-  }
-
-  // ── Render: saves modal ───────────────────────────────────────────────────
-
-  function SavesModal() {
-    const SLOTS = [1, 2, 3]
-    return (
-      <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }} onClick={e => { if (e.target === e.currentTarget) setShowSaves(false) }}>
-        <div style={{ background: '#1a1610', border: '1px solid #3a3020', width: '100%', maxWidth: '400px', padding: '16px' }}>
-          <div style={{ fontFamily: "'Cinzel Decorative', cursive", fontSize: '14px', color: '#c9952a', marginBottom: '14px', textAlign: 'center' }}>💾 Sauvegardes</div>
-          {SLOTS.map(slot => {
-            const found = allSaves.find(s => s.slot === slot)
-            const d = found?.data
-            return (
-              <div key={slot} style={{ background: '#241f17', border: '1px solid #3a3020', padding: '10px', marginBottom: '8px' }}>
-                {d ? (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                      <div style={{ fontFamily: "'Cinzel', serif", fontSize: '11px', color: '#80e090', fontWeight: 600 }}>
-                        Slot {slot} — {CHARS.find(c => c.id === d.cid)?.nm || d.cid}
-                      </div>
-                      <div style={{ fontFamily: "'Cinzel', serif", fontSize: '8px', color: '#7a6840', letterSpacing: '1px', marginTop: '2px' }}>
-                        {d.at} · {d.t} tours
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', gap: '6px' }}>
-                      <button onClick={() => loadGame(slot)} style={{ fontFamily: "'Cinzel', serif", fontSize: '9px', padding: '5px 10px', background: 'rgba(42,107,58,0.2)', border: '1px solid #3d9954', color: '#80e090', cursor: 'pointer' }}>Charger</button>
-                      {g.char && <button onClick={() => saveGame(slot)} style={{ fontFamily: "'Cinzel', serif", fontSize: '9px', padding: '5px 10px', background: 'rgba(201,149,42,0.1)', border: '1px solid #c9952a', color: '#c9952a', cursor: 'pointer' }}>Écraser</button>}
-                      <button onClick={() => delGame(slot)} style={{ fontFamily: "'Cinzel', serif", fontSize: '9px', padding: '5px 10px', background: 'transparent', border: '1px solid #3a3020', color: '#7a6840', cursor: 'pointer' }}>Effacer</button>
-                    </div>
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontFamily: "'Cinzel', serif", fontSize: '10px', color: '#3a3020', fontStyle: 'italic' }}>Slot {slot} — Vide</span>
-                    {g.char && <button onClick={() => saveGame(slot)} style={{ fontFamily: "'Cinzel', serif", fontSize: '9px', padding: '5px 10px', background: 'rgba(42,107,58,0.2)', border: '1px solid #3d9954', color: '#80e090', cursor: 'pointer' }}>Sauvegarder</button>}
-                  </div>
-                )}
-              </div>
-            )
-          })}
-          <button onClick={() => setShowSaves(false)} style={{ width: '100%', fontFamily: "'Cinzel', serif", fontSize: '10px', letterSpacing: '1px', padding: '10px', background: 'transparent', border: '1px solid #3a3020', color: '#7a6840', cursor: 'pointer', marginTop: '6px' }}>✕ Fermer</button>
-        </div>
-      </div>
-    )
-  }
-
   // ── Render: select screen ─────────────────────────────────────────────────
 
   if (phase === 'select') {
-    const bdgStyle = (bdg: string): React.CSSProperties => {
-      const map: Record<string, React.CSSProperties> = {
-        bG: { background: 'rgba(155,35,24,.2)', border: '1px solid #c8392b', color: '#ff8070' },
-        bC: { background: 'rgba(201,149,42,.15)', border: '1px solid #c9952a', color: '#e8d090' },
-        bR: { background: 'rgba(26,90,154,.2)', border: '1px solid #2d7abf', color: '#7abfff' },
-        bM: { background: 'rgba(100,42,154,.2)', border: '1px solid #9060dd', color: '#c090ff' },
-      }
-      return map[bdg] || {}
-    }
-
     return (
       <div style={S.app}>
         <div style={S.hdr}>
-          <div><div style={S.ht}>Hommlet — Scénario de test</div><div style={S.hs}>D&amp;D 2024 SRD 5.2 · Règles strictes</div></div>
+          <div><div style={S.ht}>{dict.common.appName}</div><div style={S.hs}>{dict.common.tagline}</div></div>
           <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-            <span style={S.hbdg}>v2.0</span>
-            <button onClick={signOut} style={{ ...S.hbtn, fontSize: '8px' }}>⏏ Déconnexion</button>
+            <span style={S.hbdg}>{dp.header.badge}</span>
+            <button onClick={signOut} style={{ ...S.hbtn, fontSize: '8px' }}>⏏ {dict.common.signOut}</button>
           </div>
         </div>
         <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '14px' }}>
-          {allSaves.length > 0 && (
+          {initializing && <div style={{ textAlign: 'center', color: '#7a6840', padding: '20px' }}>{dict.common.loading}</div>}
+
+          {allSaves.filter(s => s.slot !== 0).length > 0 && (
             <>
-              <div style={{ fontFamily: "'Cinzel', serif", fontSize: '8px', letterSpacing: '3px', color: '#e8d090', textTransform: 'uppercase', marginBottom: '5px', textAlign: 'center' }}>Reprendre une partie</div>
+              <div style={{ fontFamily: "'Cinzel', serif", fontSize: '8px', letterSpacing: '3px', color: '#e8d090', textTransform: 'uppercase', marginBottom: '5px', textAlign: 'center' }}>{dp.select.resumeTitle}</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '14px', paddingBottom: '14px', borderBottom: '1px solid #3a3020' }}>
-                {allSaves.filter(s => s.slot !== 0).map(s => {
-                  const ch = CHARS.find(c => c.id === s.data.cid)
-                  return (
-                    <div key={s.slot} onClick={() => loadGame(s.slot)} style={{ background: 'rgba(42,107,58,.1)', border: '1px solid #3d9954', padding: '9px 11px', cursor: 'pointer' }}>
-                      <div style={{ fontFamily: "'Cinzel', serif", fontSize: '11px', color: '#80e090', fontWeight: 600 }}>Slot {s.slot} — {ch?.nm || s.data.cid}</div>
-                      <div style={{ fontFamily: "'Cinzel', serif", fontSize: '8px', color: '#7a6840', letterSpacing: '1px', marginTop: '2px' }}>{s.data.at} · {s.data.t} tours</div>
-                    </div>
-                  )
-                })}
+                {allSaves.filter(s => s.slot !== 0).map(s => (
+                  <div key={s.slot} onClick={() => loadGame(s.slot)} style={{ background: 'rgba(42,107,58,.1)', border: '1px solid #3d9954', padding: '9px 11px', cursor: 'pointer' }}>
+                    <div style={{ fontFamily: "'Cinzel', serif", fontSize: '11px', color: '#80e090', fontWeight: 600 }}>{fmt(dp.saves.slotChar, { slot: s.slot, name: s.data.cid })}</div>
+                    <div style={{ fontFamily: "'Cinzel', serif", fontSize: '8px', color: '#7a6840', letterSpacing: '1px', marginTop: '2px' }}>{fmt(dp.saves.turns, { at: s.data.at, t: s.data.t })}</div>
+                  </div>
+                ))}
               </div>
             </>
           )}
 
-          <div style={{ fontFamily: "'Cinzel Decorative', cursive", fontSize: '17px', color: '#c9952a', textAlign: 'center', marginBottom: '4px' }}>Nouvelle partie</div>
-          <div style={{ fontFamily: "'Cinzel', serif", fontSize: '8px', letterSpacing: '2px', color: '#b8a878', textAlign: 'center', textTransform: 'uppercase', marginBottom: '10px' }}>Hommlet, Greyhawk · Niveau 1 · D&amp;D 2024</div>
-          <div style={{ fontSize: '12px', color: '#b8a878', lineHeight: 1.6, border: '1px solid #3a3020', padding: '10px', background: 'rgba(255,255,255,.02)', marginBottom: '14px', fontStyle: 'italic' }}>
-            <strong>Scénario de test</strong> en 3 actes à Hommlet : recrutement d'un compagnon à l'auberge, obstacle sur la route (ravin), puis embuscade de bandits. Règles D&D 2024 strictes — backgrounds, maîtrises d'armes, emplacements de sorts, combat à l'initiative. Mort permanente.
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '9px' }}>
-            {CHARS.map(c => (
-              <div key={c.id} onClick={() => setSelId(c.id)} style={{ background: '#1e1912', border: `2px solid ${selId === c.id ? '#3d9954' : '#3a3020'}`, padding: '11px', cursor: 'pointer', position: 'relative', ...(selId === c.id ? { background: 'rgba(42,107,58,.12)' } : {}) }}>
-                <span style={{ position: 'absolute', top: '7px', right: '7px', fontFamily: "'Cinzel', serif", fontSize: '7px', padding: '2px 5px', borderRadius: '2px', ...bdgStyle(c.bdg) }}>{c.bt}</span>
-                <div style={{ fontFamily: "'Cinzel Decorative', cursive", fontSize: '11px', color: '#c9952a', marginBottom: '2px' }}>{c.nm}</div>
-                <div style={{ fontFamily: "'Cinzel', serif", fontSize: '7px', letterSpacing: '2px', color: '#c8392b', textTransform: 'uppercase', marginBottom: '6px' }}>{c.sub}</div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '2px', marginBottom: '6px' }}>
-                  {c.ks.map(k => (
-                    <div key={k.l} style={{ background: '#241f17', border: '1px solid #3a3020', padding: '3px', textAlign: 'center' }}>
-                      <span style={{ fontFamily: "'Cinzel', serif", fontSize: '6px', color: '#7a6840', display: 'block' }}>{k.l}</span>
-                      <span style={{ fontSize: '12px', color: '#f0ead8', fontWeight: 600 }}>{k.v}</span>
-                    </div>
-                  ))}
-                </div>
-                <ul style={{ fontSize: '10px', color: '#b8a878', lineHeight: 1.6, listStyle: 'none', paddingLeft: 0 }}>
-                  {c.feats.slice(0, 2).map(f => <li key={f} style={{ paddingLeft: '8px', position: 'relative' }}><span style={{ position: 'absolute', left: 0, color: '#c9952a' }}>·</span>{f}</li>)}
-                  <li style={{ paddingLeft: '8px', position: 'relative', color: '#7a6840', fontStyle: 'italic' }}><span style={{ position: 'absolute', left: 0, color: '#c9952a' }}>·</span>{c.desc}</li>
-                </ul>
-              </div>
-            ))}
+          <div style={{ fontFamily: "'Cinzel Decorative', cursive", fontSize: '17px', color: '#c9952a', textAlign: 'center', marginBottom: '10px' }}>{dp.select.newGameTitle}</div>
+          <div style={{ fontSize: '12px', color: '#b8a878', lineHeight: 1.6, border: '1px solid #3a3020', padding: '10px', background: 'rgba(255,255,255,.02)', marginBottom: '14px', fontStyle: 'italic', textAlign: 'center' }}>
+            {dp.select.newGameDesc}
           </div>
 
           <button
-            onClick={startGame}
-            disabled={!selId}
-            style={{ fontFamily: "'Cinzel', serif", fontSize: '11px', letterSpacing: '2px', textTransform: 'uppercase', padding: '14px', background: '#2a6b3a', border: '2px solid #3d9954', color: '#fff', cursor: selId ? 'pointer' : 'not-allowed', width: '100%', marginTop: '14px', fontWeight: 600, opacity: selId ? 1 : 0.3 }}
+            onClick={() => router.push(`/${lang}/new-game`)}
+            style={{ fontFamily: "'Cinzel', serif", fontSize: '11px', letterSpacing: '2px', textTransform: 'uppercase', padding: '14px', background: '#2a6b3a', border: '2px solid #3d9954', color: '#fff', cursor: 'pointer', width: '100%', fontWeight: 600 }}
           >
-            ⚔ Partir à l'aventure
+            {dp.select.newGameButton}
           </button>
         </div>
       </div>
@@ -949,42 +797,40 @@ export default function PlayPage() {
   // ── Render: play screen ───────────────────────────────────────────────────
 
   const pendRoll = g.pendRoll
-  const inputLocked = isInputLocked()
+  const inputLocked = isInputLockedFor(g)
   const tokens = g.tokens
+  const campaign = CAMPAIGNS.find(c => c.id === g.char?.campaign)
 
   return (
     <div style={S.app}>
-      {/* Header */}
       <div style={S.hdr}>
-        <div><div style={S.ht}>Hommlet — Test</div><div style={S.hs}>D&amp;D 2024 · Combat strict</div></div>
+        <div><div style={S.ht}>{campaign ? campaign.name[lang] : dict.common.appName}</div><div style={S.hs}>{dict.common.tagline}</div></div>
         <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
-          {g.inCombat && <button onClick={() => setShowDrawer(true)} style={{ ...S.hbtn, background: 'rgba(155,35,24,.2)', borderColor: '#c8392b', color: '#ff9050', fontSize: '9px', fontWeight: 600 }}>⚔ Combat</button>}
-          <span style={S.hbdg}>{g.hp}/{g.hpMax} PV</span>
+          {g.inCombat && <button onClick={() => setShowDrawer(true)} style={{ ...S.hbtn, background: 'rgba(155,35,24,.2)', borderColor: '#c8392b', color: '#ff9050', fontSize: '9px', fontWeight: 600 }}>{dp.header.combatButton}</button>}
+          <span style={S.hbdg}>{fmt(dp.header.hpBadge, { hp: g.hp, hpMax: g.hpMax })}</span>
           <button onClick={() => setShowTokenDetail(true)} style={{ ...S.hbtn, fontSize: '8px' }}>{tokenLabel(tokens)}</button>
           <button onClick={() => { apiLoadAll().then(setAllSaves); setShowSaves(true) }} style={S.hbtn}>💾</button>
           <button onClick={abandonGame} style={{ ...S.hbtn, borderColor: '#c8392b', color: '#ff8070' }}>⏏</button>
         </div>
       </div>
 
-      {/* Roll banner */}
       {pendRoll && (
         <div style={{ background: '#7a4f0a', borderBottom: '1px solid #c8820a', padding: '6px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
           <div>
-            <div style={{ fontFamily: "'Cinzel', serif", fontSize: '8px', letterSpacing: '2px', color: '#ffcc70', textTransform: 'uppercase' }}>⚠ Jet requis</div>
-            <div style={{ fontSize: '11px', color: '#ffe090', fontWeight: 600 }}>{pendRoll.label}{pendRoll.dc ? ` · DD${pendRoll.dc}` : ''}</div>
+            <div style={{ fontFamily: "'Cinzel', serif", fontSize: '8px', letterSpacing: '2px', color: '#ffcc70', textTransform: 'uppercase' }}>{dp.rollBanner.required}</div>
+            <div style={{ fontSize: '11px', color: '#ffe090', fontWeight: 600 }}>{pendRoll.label}{pendRoll.dc ? ` · ${fmt(dp.rollBanner.dc, { dc: pendRoll.dc })}` : ''}</div>
           </div>
           <span style={{ fontFamily: "'Cinzel', serif", fontSize: '7px', padding: '2px 5px', borderRadius: '2px', color: '#fff', background: pendRoll.advantage === 'advantage' ? '#2a6b3a' : pendRoll.advantage === 'disadvantage' ? '#9b2318' : '#445' }}>
-            {pendRoll.advantage === 'advantage' ? 'Avantage' : pendRoll.advantage === 'disadvantage' ? 'Désavantage' : 'Normal'}
+            {pendRoll.advantage === 'advantage' ? dp.rollBanner.advantage : pendRoll.advantage === 'disadvantage' ? dp.rollBanner.disadvantage : dp.rollBanner.normal}
           </span>
         </div>
       )}
 
-      {/* Combat tracker */}
       {g.inCombat && (
         <div style={{ background: '#1a1610', borderBottom: '1px solid #c8392b', flexShrink: 0 }}>
           <div onClick={() => setCbCollapsed(p => !p)} style={{ padding: '5px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}>
-            <span style={{ fontFamily: "'Cinzel', serif", fontSize: '9px', letterSpacing: '2px', color: '#ff9050', textTransform: 'uppercase' }}>⚔ COMBAT</span>
-            <span style={{ fontFamily: "'Cinzel', serif", fontSize: '8px', color: '#b8a878' }}>Round {g.combatRound} {cbCollapsed ? '▶' : '▼'}</span>
+            <span style={{ fontFamily: "'Cinzel', serif", fontSize: '9px', letterSpacing: '2px', color: '#ff9050', textTransform: 'uppercase' }}>{dp.combat.label}</span>
+            <span style={{ fontFamily: "'Cinzel', serif", fontSize: '8px', color: '#b8a878' }}>{fmt(dp.combat.round, { n: g.combatRound })} {cbCollapsed ? '▶' : '▼'}</span>
           </div>
           {!cbCollapsed && (
             <div style={{ overflowX: 'auto', paddingBottom: '6px' }}>
@@ -1000,11 +846,10 @@ export default function PlayPage() {
         </div>
       )}
 
-      {/* Battle map */}
       {g.inCombat && g.battleMap && (
         <div style={{ background: '#0f0d09', borderBottom: '1px solid #3a3020', flexShrink: 0 }}>
           <div onClick={() => setBmCollapsed(p => !p)} style={{ padding: '4px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}>
-            <span style={{ fontFamily: "'Cinzel', serif", fontSize: '8px', letterSpacing: '2px', color: '#7a6840', textTransform: 'uppercase' }}>Carte tactique</span>
+            <span style={{ fontFamily: "'Cinzel', serif", fontSize: '8px', letterSpacing: '2px', color: '#7a6840', textTransform: 'uppercase' }}>{dp.battleMap.title}</span>
             <span style={{ fontFamily: "'Cinzel', serif", fontSize: '8px', color: '#3a3020' }}>{bmCollapsed ? '▶' : '▼'}</span>
           </div>
           {!bmCollapsed && (
@@ -1016,23 +861,22 @@ export default function PlayPage() {
         </div>
       )}
 
-      {/* Log */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        <div style={{ fontFamily: "'Cinzel', serif", fontSize: '7px', letterSpacing: '3px', textTransform: 'uppercase', color: '#7a6840', padding: '4px 12px', flexShrink: 0 }}>Chronique</div>
+        <div style={{ fontFamily: "'Cinzel', serif", fontSize: '7px', letterSpacing: '3px', textTransform: 'uppercase', color: '#7a6840', padding: '4px 12px', flexShrink: 0 }}>{dp.log.title}</div>
         <div ref={logEl} style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '6px 12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
           {log.map(msg => (
             <div key={msg.id} style={msgStyle(msg)}>
               {(msg.type === 'dm' || msg.type === 'pl') && (
                 <span style={{ fontFamily: "'Cinzel', serif", fontSize: '7px', letterSpacing: '2px', textTransform: 'uppercase', color: msg.type === 'dm' ? '#7a6840' : '#2a6b3a', display: 'block', marginBottom: '2px' }}>
-                  {msg.type === 'dm' ? 'Maître du Jeu' : g.char?.nm || 'Joueur'}
+                  {msg.type === 'dm' ? dp.log.dmLabel : g.char?.name || ''}
                 </span>
               )}
-              <span dangerouslySetInnerHTML={{ __html: msg.type === 'dm' || msg.type === 'pl' || msg.type === 'cbt' ? fmt(msg.text) : msg.text }} />
+              <span dangerouslySetInnerHTML={{ __html: msg.type === 'dm' || msg.type === 'pl' || msg.type === 'cbt' ? fmtLog(msg.text) : msg.text }} />
             </div>
           ))}
           {loading && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 0' }}>
-              <span style={{ fontFamily: "'Cinzel', serif", fontSize: '9px', color: '#7a6840' }}>Le MJ réfléchit</span>
+              <span style={{ fontFamily: "'Cinzel', serif", fontSize: '9px', color: '#7a6840' }}>{dp.log.thinking}</span>
               <div style={{ display: 'flex', gap: '3px', alignItems: 'center' }}>
                 {[0, 1, 2].map(i => (
                   <div key={i} style={{ width: '4px', height: '4px', borderRadius: '50%', background: '#c9952a', animation: `pulse 1.2s ease-in-out ${i * 0.4}s infinite` }} />
@@ -1048,51 +892,47 @@ export default function PlayPage() {
         </div>
       </div>
 
-      {/* Sheet button */}
       <button onClick={() => setShowSheet(true)} style={{ fontFamily: "'Cinzel', serif", fontSize: '10px', letterSpacing: '1px', padding: '8px', background: '#1a1610', border: 'none', borderTop: '1px solid #3a3020', color: '#b8a878', cursor: 'pointer', flexShrink: 0 }}>
-        📋 Fiche · Inventaire · Sorts · Capacités
+        {dp.sheetButton}
       </button>
 
-      {/* Manual next turn button */}
       {showManualNext && !loading && (
         <button onClick={playAutoTurn} style={{ fontFamily: "'Cinzel', serif", fontSize: '11px', letterSpacing: '2px', textTransform: 'uppercase', padding: '11px', background: '#7a4f0a', border: 'none', borderTop: '1px solid #c8820a', borderBottom: '1px solid #c8820a', color: '#fff', cursor: 'pointer', width: '100%', fontWeight: 600, flexShrink: 0 }}>
-          ▶ Jouer le tour de {showManualNext.name}
+          {fmt(dp.playTurnButton, { name: showManualNext.name })}
         </button>
       )}
 
-      {/* Dice row */}
       <div style={{ background: '#1a1610', borderTop: '1px solid #3a3020', padding: '8px 12px', flexShrink: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
           <div>
             <div style={{ fontFamily: "'Cinzel', serif", fontSize: '7px', letterSpacing: '2px', textTransform: 'uppercase', color: '#7a6840' }}>
-              Dés{pendRoll ? ` — ${pendRoll.label}` : ''}
+              {dp.dice.label}{pendRoll ? ` — ${pendRoll.label}` : ''}
             </div>
-            {pendRoll && <div style={{ fontSize: '10px', color: '#c9952a' }}>d{pendRoll.dice}{pendRoll.mod !== 0 ? (pendRoll.mod > 0 ? '+' : '') + pendRoll.mod : ''}{pendRoll.dc ? ` DD${pendRoll.dc}` : ''} ({pendRoll.modLabel})</div>}
+            {pendRoll && <div style={{ fontSize: '10px', color: '#c9952a' }}>d{pendRoll.dice}{pendRoll.mod !== 0 ? (pendRoll.mod > 0 ? '+' : '') + pendRoll.mod : ''}{pendRoll.dc ? ` ${fmt(dp.rollBanner.dc, { dc: pendRoll.dc })}` : ''} ({pendRoll.modLabel})</div>}
           </div>
         </div>
         <div style={{ display: 'flex', gap: '4px' }}>
-          {[4, 6, 8, 10, 12, 20, 100].map(d => {
-            const isReq = pendRoll?.dice === d
+          {[4, 6, 8, 10, 12, 20, 100].map(dd => {
+            const isReq = pendRoll?.dice === dd
             return (
-              <button key={d} onClick={() => rDie(d)} disabled={!isReq} style={{ flex: 1, fontFamily: "'Cinzel', serif", fontSize: '10px', padding: '7px 2px', background: isReq ? '#1e1912' : '#1e1912', border: `1px solid ${isReq ? '#c9952a' : '#3a3020'}`, color: isReq ? '#c9952a' : '#3a3020', cursor: isReq ? 'pointer' : 'not-allowed', borderRadius: '2px', fontWeight: isReq ? 600 : 400 }}>
-                {d === 100 ? 'd%' : `d${d}`}
+              <button key={dd} onClick={() => rDie(dd)} disabled={!isReq} style={{ flex: 1, fontFamily: "'Cinzel', serif", fontSize: '10px', padding: '7px 2px', background: '#1e1912', border: `1px solid ${isReq ? '#c9952a' : '#3a3020'}`, color: isReq ? '#c9952a' : '#3a3020', cursor: isReq ? 'pointer' : 'not-allowed', borderRadius: '2px', fontWeight: isReq ? 600 : 400 }}>
+                {dd === 100 ? 'd%' : `d${dd}`}
               </button>
             )
           })}
         </div>
       </div>
 
-      {/* Input area */}
       <div style={{ background: '#1e1912', borderTop: '1px solid #3a3020', flexShrink: 0 }}>
         {pendRoll && (
           <div style={{ padding: '6px 12px', background: 'rgba(155,35,24,.1)', fontFamily: "'Cinzel', serif", fontSize: '9px', letterSpacing: '1px', color: '#ff8070', textAlign: 'center' }}>
-            ⚠ LANCEZ LE DÉ REQUIS AVANT DE CONTINUER
+            {dp.input.rollRequired}
           </div>
         )}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', padding: '6px 12px 4px' }}>
-          {QA_TEXTS.map((t, i) => (
-            <button key={i} onClick={() => { if (!pendRoll) { setInputText(t); setTimeout(sendMsg, 0) } }} disabled={!!pendRoll || inputLocked} style={{ fontFamily: "'Cinzel', serif", fontSize: '9px', padding: '4px 8px', background: '#241f17', border: '1px solid #3a3020', color: '#7a6840', cursor: 'pointer', borderRadius: '2px', opacity: (pendRoll || inputLocked) ? 0.4 : 1 }}>
-              {['👁 Observer', '💬 Parler', '🔍 Fouiller', '⚔ Attaquer', '💤 Repos court', '📍 Situation'][i]}
+          {(['observe', 'talk', 'search', 'attack', 'shortRest', 'recap'] as const).map(key => (
+            <button key={key} onClick={() => { if (!pendRoll) { setInputText(dp.quickActions[key]); setTimeout(sendMsg, 0) } }} disabled={!!pendRoll || inputLocked} style={{ fontFamily: "'Cinzel', serif", fontSize: '9px', padding: '4px 8px', background: '#241f17', border: '1px solid #3a3020', color: '#7a6840', cursor: 'pointer', borderRadius: '2px', opacity: (pendRoll || inputLocked) ? 0.4 : 1 }}>
+              {dp.quickActionLabels[key]}
             </button>
           ))}
         </div>
@@ -1101,45 +941,49 @@ export default function PlayPage() {
             value={inputText}
             onChange={e => setInputText(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg() } }}
-            placeholder={inputLocked && !pendRoll ? (g.inCombat ? 'Attendez votre tour...' : 'Chargement...') : 'Décrivez votre action...'}
+            placeholder={inputLocked && !pendRoll ? (g.inCombat ? dp.input.waitingTurn : dp.input.loading) : dp.input.placeholder}
             disabled={inputLocked}
             rows={2}
             style={{ flex: 1, fontFamily: "'Crimson Pro', serif", fontSize: '14px', padding: '9px 10px', background: inputLocked ? '#16130d' : '#241f17', border: '1px solid #3a3020', color: '#f0ead8', outline: 'none', resize: 'none', WebkitAppearance: 'none', opacity: inputLocked ? 0.5 : 1 }}
           />
           <button onClick={sendMsg} disabled={inputLocked || loading} style={{ fontFamily: "'Cinzel', serif", fontSize: '11px', letterSpacing: '1px', textTransform: 'uppercase', padding: '10px 14px', background: '#2a6b3a', border: '2px solid #3d9954', color: '#fff', cursor: (inputLocked || loading) ? 'not-allowed' : 'pointer', opacity: (inputLocked || loading) ? 0.4 : 1, alignSelf: 'stretch' }}>
-            Agir →
+            {dp.input.send}
           </button>
         </div>
       </div>
 
-      {/* Modals */}
-      {showSheet && <SheetModal />}
-      {showSaves && <SavesModal />}
+      {showSheet && <SheetModal g={g} lang={lang} dict={dict} onClose={() => setShowSheet(false)} />}
+      {showSaves && (
+        <SavesModal
+          g={g} dict={dict} allSaves={allSaves}
+          onLoad={loadGame} onSave={saveGame} onDelete={delGame}
+          onClose={() => setShowSaves(false)}
+        />
+      )}
 
-      {/* Combat drawer (mobile) */}
       {showDrawer && (
         <>
           <div onClick={() => setShowDrawer(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 149 }} />
           <div style={{ position: 'fixed', top: 0, right: 0, width: '88%', maxWidth: '380px', height: '100vh', background: '#1a1610', borderLeft: '2px solid #c8392b', zIndex: 150, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
             <div style={{ padding: '10px 14px', background: '#1e1912', borderBottom: '2px solid #c8392b', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-              <span style={{ fontFamily: "'Cinzel Decorative', cursive", fontSize: '14px', color: '#ff9050' }}>⚔ Combat</span>
-              <button onClick={() => setShowDrawer(false)} style={{ fontFamily: "'Cinzel', serif", fontSize: '10px', letterSpacing: '1px', padding: '5px 10px', background: 'transparent', border: '1px solid #7a6840', color: '#7a6840', cursor: 'pointer', borderRadius: '2px' }}>✕ Fermer</button>
+              <span style={{ fontFamily: "'Cinzel Decorative', cursive", fontSize: '14px', color: '#ff9050' }}>{dp.combat.label}</span>
+              <button onClick={() => setShowDrawer(false)} style={{ fontFamily: "'Cinzel', serif", fontSize: '10px', letterSpacing: '1px', padding: '5px 10px', background: 'transparent', border: '1px solid #7a6840', color: '#7a6840', cursor: 'pointer', borderRadius: '2px' }}>{dp.saves.close}</button>
             </div>
             <div style={{ flex: 1, overflowY: 'auto', padding: '12px' }}>
-              <div style={{ fontFamily: "'Cinzel', serif", fontSize: '8px', letterSpacing: '2px', color: '#ff9050', textTransform: 'uppercase', marginBottom: '6px', borderBottom: '1px solid #3a3020', paddingBottom: '3px' }}>Initiative · Round {g.combatRound}</div>
+              <div style={{ fontFamily: "'Cinzel', serif", fontSize: '8px', letterSpacing: '2px', color: '#ff9050', textTransform: 'uppercase', marginBottom: '6px', borderBottom: '1px solid #3a3020', paddingBottom: '3px' }}>{fmt(dp.combat.round, { n: g.combatRound })}</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '14px' }}>
                 {g.initiative.map((t, i) => (
                   <div key={t.ref} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 8px', background: i === g.currentTurn ? 'rgba(201,149,42,.1)' : 'transparent', border: `1px solid ${i === g.currentTurn ? '#c9952a' : '#3a3020'}` }}>
                     <span style={{ fontFamily: "'Cinzel', serif", fontSize: '11px', color: '#7a6840', minWidth: '24px', textAlign: 'right' }}>{t.init}</span>
                     <span style={{ fontFamily: "'Cinzel', serif", fontSize: '11px', color: t.dead ? '#3a3020' : t.isPlayer || t.isAlly ? '#80e090' : '#ff8070', textDecoration: t.dead ? 'line-through' : 'none' }}>
-                      {i === g.currentTurn ? '▶ ' : ''}{t.name}{t.isAlly ? ' (allié)' : ''}{t.downed ? ' 🩸' : t.stabilized ? ' 💤' : ''}
+                      {i === g.currentTurn ? '▶ ' : ''}{t.name}{t.isAlly ? dp.combatMsgs.allySuffix : ''}{t.downed ? ' 🩸' : t.stabilized ? ' 💤' : ''}
                     </span>
                   </div>
                 ))}
               </div>
               {g.battleMap && (
                 <>
-                  <div style={{ fontFamily: "'Cinzel', serif", fontSize: '8px', letterSpacing: '2px', color: '#ff9050', textTransform: 'uppercase', marginBottom: '6px', borderBottom: '1px solid #3a3020', paddingBottom: '3px' }}>Carte tactique</div>
+                  <div style={{ fontFamily: "'Cinzel', serif", fontSize: '8px', letterSpacing: '2px', color: '#ff9050', textTransform: 'uppercase', marginBottom: '6px', borderBottom: '1px solid #3a3020', paddingBottom: '3px' }}>{dp.battleMap.title}</div>
                   <pre style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '11px', color: '#e8d090', background: '#0f0d09', padding: '8px', border: '1px solid #3a3020', lineHeight: 1.25, whiteSpace: 'pre', overflowX: 'auto', letterSpacing: '1px', marginBottom: '5px' }}>{g.battleMap}</pre>
                   <div style={{ fontFamily: "'Cinzel', serif", fontSize: '9px', color: '#7a6840' }}>{g.battleMapLegend}</div>
                 </>
@@ -1149,29 +993,27 @@ export default function PlayPage() {
         </>
       )}
 
-      {/* Token detail modal */}
       {showTokenDetail && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }} onClick={() => setShowTokenDetail(false)}>
           <div style={{ background: '#1a1610', border: '1px solid #3a3020', padding: '16px', minWidth: '260px' }} onClick={e => e.stopPropagation()}>
-            <div style={{ fontFamily: "'Cinzel', serif", fontSize: '10px', letterSpacing: '2px', color: '#c9952a', textTransform: 'uppercase', marginBottom: '12px' }}>Consommation API</div>
+            <div style={{ fontFamily: "'Cinzel', serif", fontSize: '10px', letterSpacing: '2px', color: '#c9952a', textTransform: 'uppercase', marginBottom: '12px' }}>{dp.tokens.title}</div>
             {[
-              ['Appels', String(tokens.calls)],
-              ['Entrée', `${tokens.input.toLocaleString()} tk`],
-              ['Sortie', `${tokens.output.toLocaleString()} tk`],
-              ['Cache créé', `${tokens.cacheCreate.toLocaleString()} tk`],
-              ['Cache lu', `${tokens.cacheRead.toLocaleString()} tk`],
+              [dp.tokens.calls, String(tokens.calls)],
+              [dp.tokens.input, `${tokens.input.toLocaleString()} tk`],
+              [dp.tokens.output, `${tokens.output.toLocaleString()} tk`],
+              [dp.tokens.cacheCreate, `${tokens.cacheCreate.toLocaleString()} tk`],
+              [dp.tokens.cacheRead, `${tokens.cacheRead.toLocaleString()} tk`],
             ].map(([l, v]) => (
               <div key={l} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '12px' }}>
                 <span style={{ color: '#7a6840' }}>{l}</span>
                 <span style={{ color: '#f0ead8', fontFamily: "'JetBrains Mono', monospace", fontSize: '11px' }}>{v}</span>
               </div>
             ))}
-            <button onClick={() => setShowTokenDetail(false)} style={{ width: '100%', marginTop: '8px', fontFamily: "'Cinzel', serif", fontSize: '10px', padding: '8px', background: 'transparent', border: '1px solid #3a3020', color: '#7a6840', cursor: 'pointer' }}>✕ Fermer</button>
+            <button onClick={() => setShowTokenDetail(false)} style={{ width: '100%', marginTop: '8px', fontFamily: "'Cinzel', serif", fontSize: '10px', padding: '8px', background: 'transparent', border: '1px solid #3a3020', color: '#7a6840', cursor: 'pointer' }}>{dp.saves.close}</button>
           </div>
         </div>
       )}
 
-      {/* Toast */}
       {toast && (
         <div style={{ position: 'fixed', bottom: '16px', left: '50%', transform: 'translateX(-50%)', background: toast.err ? '#9b2318' : '#2a6b3a', color: '#fff', fontFamily: "'Cinzel', serif", fontSize: '9px', letterSpacing: '2px', textTransform: 'uppercase', padding: '8px 15px', border: `1px solid ${toast.err ? '#c8392b' : '#3d9954'}`, zIndex: 999, whiteSpace: 'nowrap' }}>
           {toast.msg}
@@ -1182,6 +1024,147 @@ export default function PlayPage() {
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes pulse { 0%, 60%, 100% { opacity: 0.2; } 30% { opacity: 1; } }
       `}</style>
+    </div>
+  )
+}
+
+// ─── Character sheet modal ────────────────────────────────────────────────
+
+function SheetModal({ g, lang, dict, onClose }: { g: G; lang: Lang; dict: Dictionary; onClose: () => void }) {
+  const dp = dict.play
+  const c = g.char; if (!c) return null
+  const pct = Math.max(0, g.hp / g.hpMax * 100)
+  const bc = pct > 50 ? '#2a6b3a' : pct > 25 ? '#c9952a' : '#9b2318'
+  const styl = { fontFamily: "'Cinzel', serif", fontSize: '8px', letterSpacing: '2px', color: '#b8a878', textTransform: 'uppercase' as const, marginTop: '12px', marginBottom: '4px' }
+  const speciesMap = getSpecies(lang) as Record<string, SpeciesData>
+  const bgMap = getBackgrounds(lang) as Record<string, BackgroundData>
+  const classMap = getClasses(lang) as Record<string, ClassData>
+  const species = speciesMap[c.species]; const bg = bgMap[c.background]; const cls = classMap[c.class]
+  const al = ABILITY_LABELS[lang]
+  const abilityOrder: (keyof typeof al)[] = ['str', 'dex', 'con', 'int', 'wis', 'cha']
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 200, overflowY: 'auto', padding: '16px' }} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div style={{ background: '#1a1610', border: '1px solid #3a3020', maxWidth: '500px', margin: '0 auto', padding: '16px', position: 'relative' }}>
+        <button onClick={onClose} style={{ position: 'absolute', top: '8px', right: '8px', background: 'transparent', border: '1px solid #3a3020', color: '#7a6840', cursor: 'pointer', padding: '4px 8px', fontFamily: "'Cinzel', serif", fontSize: '9px' }}>{dp.sheet.close}</button>
+        <div style={{ fontFamily: "'Cinzel Decorative', cursive", fontSize: '14px', color: '#c9952a', marginBottom: '2px' }}>{c.name}</div>
+        <div style={{ fontFamily: "'Cinzel', serif", fontSize: '8px', color: '#c8392b', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '8px' }}>
+          {species?.name}{c.subrace ? ` (${species?.subraces?.[c.subrace]?.name})` : ''} · {cls?.name} · {dict.newGame.review.level} {c.level}
+        </div>
+        <div style={{ fontSize: '10px', color: '#b8a878', background: 'rgba(255,255,255,0.02)', border: '1px solid #3a3020', padding: '6px', marginBottom: '8px' }}>
+          {fmt(dp.sheet.background, { bg: bg?.name || c.background, desc: bg?.description || '' })}
+        </div>
+
+        <div style={styl}>{dp.sheet.abilityScores}</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: '4px', marginBottom: '8px' }}>
+          {abilityOrder.map(k => (
+            <div key={k} style={{ background: '#241f17', border: '1px solid #3a3020', padding: '4px', textAlign: 'center' }}>
+              <div style={{ fontFamily: "'Cinzel', serif", fontSize: '6px', color: '#7a6840' }}>{al[k]}</div>
+              <div style={{ fontSize: '14px', fontWeight: 600 }}>{c[k]}</div>
+              <div style={{ fontSize: '10px', color: '#c9952a' }}>{mS(c[k])}</div>
+            </div>
+          ))}
+        </div>
+
+        <div style={styl}>{dp.sheet.combatLine}</div>
+        <div style={{ marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ fontFamily: "'Cinzel', serif", fontSize: '9px', color: '#7a6840' }}>{dp.sheet.hp}</span>
+          <span style={{ fontSize: '14px', fontWeight: 600 }}>{g.hp} / {g.hpMax}</span>
+        </div>
+        <div style={{ height: '6px', background: '#241f17', border: '1px solid #3a3020', marginBottom: '8px' }}>
+          <div style={{ height: '100%', width: `${pct}%`, background: bc, transition: 'width 0.3s' }} />
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '4px', marginBottom: '8px' }}>
+          {[[dp.sheet.ac, String(c.ac)], [dp.sheet.init, mS(c.dex)], [dp.sheet.pb, '+2']].map(([l, v]) => (
+            <div key={l} style={{ background: '#241f17', border: '1px solid #3a3020', padding: '6px', textAlign: 'center' }}>
+              <div style={{ fontFamily: "'Cinzel', serif", fontSize: '6px', color: '#7a6840' }}>{l}</div>
+              <div style={{ fontSize: '14px', fontWeight: 600, color: l === dp.sheet.pb ? '#c9952a' : '#f0ead8' }}>{v}</div>
+            </div>
+          ))}
+        </div>
+
+        {g.conds.length > 0 && (<><div style={styl}>{dp.sheet.conditions}</div><div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '8px' }}>{g.conds.map(cd => <span key={cd} style={{ background: 'rgba(155,35,24,0.2)', border: '1px solid #c8392b', color: '#ff8070', padding: '2px 6px', fontSize: '10px', fontFamily: "'Cinzel', serif" }}>{cd}</span>)}</div></>)}
+
+        {(c.cantrips?.length || c.spells_known?.length) ? (
+          <>
+            {c.spell_slots && (
+              <>
+                <div style={styl}>{dp.sheet.spellSlots}</div>
+                {Object.keys(c.spell_slots).map(lv => {
+                  const tot = c.spell_slots![+lv]; const used = g.spUsed[+lv] || 0
+                  return (
+                    <div key={lv} style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                      <span style={{ fontFamily: "'Cinzel', serif", fontSize: '8px', color: '#7a6840' }}>{fmt(dp.sheet.level, { lv })}</span>
+                      {Array.from({ length: tot }).map((_, i) => <div key={i} style={{ width: '12px', height: '12px', borderRadius: '50%', background: i < used ? '#241f17' : '#c9952a', border: '1px solid #3a3020' }} />)}
+                      <span style={{ fontFamily: "'Cinzel', serif", fontSize: '8px', color: '#7a6840' }}>{tot - used}/{tot}</span>
+                    </div>
+                  )
+                })}
+              </>
+            )}
+            {!!c.cantrips?.length && <><div style={styl}>{dp.sheet.cantrips}</div><ul style={{ paddingLeft: '16px', fontSize: '11px', color: '#b8a878', lineHeight: 1.7, marginBottom: '8px' }}>{c.cantrips.map(s => <li key={s}>{s}</li>)}</ul></>}
+            {!!c.spells_known?.length && <><div style={styl}>{dp.sheet.spellsKnown}</div><ul style={{ paddingLeft: '16px', fontSize: '11px', color: '#b8a878', lineHeight: 1.7, marginBottom: '8px' }}>{c.spells_known.map(s => <li key={s}>{s}</li>)}</ul></>}
+          </>
+        ) : null}
+
+        <div style={styl}>{dp.sheet.equipment}</div>
+        <div style={{ fontFamily: "'Cinzel', serif", fontSize: '11px', color: '#e8d090', marginBottom: '4px' }}>{fmt(dp.sheet.purse, { gold: g.gold })}</div>
+        <ul style={{ paddingLeft: '16px', fontSize: '11px', color: '#b8a878', lineHeight: 1.7, marginBottom: '8px' }}>{g.inv.map((i, idx) => <li key={idx}>{i}</li>)}</ul>
+
+        <div style={styl}>{dp.sheet.features}</div>
+        <div style={{ fontSize: '11px', color: '#b8a878', lineHeight: 1.7, marginBottom: '8px' }}>{c.features.map((f, idx) => <div key={idx} style={{ marginBottom: '3px' }}><strong style={{ color: '#e8d090' }}>{f.name}</strong>: {f.description}</div>)}</div>
+
+        {g.notes && (<><div style={styl}>{dp.sheet.notes}</div><div style={{ fontSize: '10px', color: '#7a6840', fontStyle: 'italic' }}>{g.notes}</div></>)}
+      </div>
+    </div>
+  )
+}
+
+// ─── Saves modal ───────────────────────────────────────────────────────────
+
+function SavesModal({ g, dict, allSaves, onLoad, onSave, onDelete, onClose }: {
+  g: G; dict: Dictionary; allSaves: { slot: number; data: SlotData }[]
+  onLoad: (slot: number) => void; onSave: (slot: number) => void; onDelete: (slot: number) => void
+  onClose: () => void
+}) {
+  const dp = dict.play
+  const SLOTS = [1, 2, 3]
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div style={{ background: '#1a1610', border: '1px solid #3a3020', width: '100%', maxWidth: '400px', padding: '16px' }}>
+        <div style={{ fontFamily: "'Cinzel Decorative', cursive", fontSize: '14px', color: '#c9952a', marginBottom: '14px', textAlign: 'center' }}>{dp.saves.title}</div>
+        {SLOTS.map(slot => {
+          const found = allSaves.find(s => s.slot === slot)
+          const d = found?.data
+          return (
+            <div key={slot} style={{ background: '#241f17', border: '1px solid #3a3020', padding: '10px', marginBottom: '8px' }}>
+              {d ? (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontFamily: "'Cinzel', serif", fontSize: '11px', color: '#80e090', fontWeight: 600 }}>
+                      {fmt(dp.saves.slotChar, { slot, name: g.char?.id === d.cid ? g.char.name : d.cid })}
+                    </div>
+                    <div style={{ fontFamily: "'Cinzel', serif", fontSize: '8px', color: '#7a6840', letterSpacing: '1px', marginTop: '2px' }}>
+                      {fmt(dp.saves.turns, { at: d.at, t: d.t })}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <button onClick={() => onLoad(slot)} style={{ fontFamily: "'Cinzel', serif", fontSize: '9px', padding: '5px 10px', background: 'rgba(42,107,58,0.2)', border: '1px solid #3d9954', color: '#80e090', cursor: 'pointer' }}>{dp.saves.load}</button>
+                    {g.char && <button onClick={() => onSave(slot)} style={{ fontFamily: "'Cinzel', serif", fontSize: '9px', padding: '5px 10px', background: 'rgba(201,149,42,0.1)', border: '1px solid #c9952a', color: '#c9952a', cursor: 'pointer' }}>{dp.saves.overwrite}</button>}
+                    <button onClick={() => onDelete(slot)} style={{ fontFamily: "'Cinzel', serif", fontSize: '9px', padding: '5px 10px', background: 'transparent', border: '1px solid #3a3020', color: '#7a6840', cursor: 'pointer' }}>{dp.saves.delete}</button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontFamily: "'Cinzel', serif", fontSize: '10px', color: '#3a3020', fontStyle: 'italic' }}>{fmt(dp.saves.empty, { slot })}</span>
+                  {g.char && <button onClick={() => onSave(slot)} style={{ fontFamily: "'Cinzel', serif", fontSize: '9px', padding: '5px 10px', background: 'rgba(42,107,58,0.2)', border: '1px solid #3d9954', color: '#80e090', cursor: 'pointer' }}>{dp.saves.save}</button>}
+                </div>
+              )}
+            </div>
+          )
+        })}
+        <button onClick={onClose} style={{ width: '100%', fontFamily: "'Cinzel', serif", fontSize: '10px', letterSpacing: '1px', padding: '10px', background: 'transparent', border: '1px solid #3a3020', color: '#7a6840', cursor: 'pointer', marginTop: '6px' }}>{dp.saves.close}</button>
+      </div>
     </div>
   )
 }

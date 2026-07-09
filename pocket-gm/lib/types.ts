@@ -62,48 +62,58 @@ export interface SaveSlot {
   updated_at: string
 }
 
-export interface CharStat {
-  FOR: number
-  DEX: number
-  CON: number
-  INT: number
-  SAG: number
-  CHA: number
+export interface EquipmentItem {
+  name: string
+  quantity: number
+  notes?: string // e.g. "1d8+3 slashing, versatile"
 }
 
-export interface CharSpell {
-  ab: string
-  dc: number
-  att: string
-  sl: Record<number, number>
-  us: Record<number, number>
-  cants: string[]
-  prep: string[]
+export interface Feature {
+  name: string
+  description: string
+  recharge?: 'short_rest' | 'long_rest' | 'daily'
+  uses?: number
 }
 
 export interface Character {
   id: string
-  nm: string
-  sub: string
+  user_id: string
+  name: string
+  species: string
+  subrace?: string
+  class: string
+  subclass?: string
   background: string
-  bgDesc: string
-  bdg: string
-  bt: string
-  stats: CharStat
-  hp: number
-  hpMax: number
-  ca: number
-  init: string
-  saves: { n: string; v: string; p?: number }[]
-  skills: { n: string; v: string }[]
-  bgFeat: string
-  weaponMastery?: { n: string; mastery: string; desc: string }[]
-  eq: string[]
-  atk: { n: string; b: string; d: string; note?: string }[]
-  feats: string[]
-  sp: CharSpell | null
-  ks: { l: string; v: string }[]
-  desc: string
+  level: number
+
+  str: number; dex: number; con: number
+  int: number; wis: number; cha: number
+
+  hp_max: number
+  ac: number
+  speed: number
+
+  saving_throw_profs: string[]
+  skill_profs: string[]
+  armor_profs: string[]
+  weapon_profs: string[]
+  tool_profs: string[]
+
+  equipment: EquipmentItem[]
+  features: Feature[]
+
+  cantrips?: string[]
+  spells_known?: string[]
+  spell_slots?: Record<number, number>
+
+  is_pregenerated: boolean
+  campaign?: string
+}
+
+// Partial type used during the wizard
+export type CharacterDraft = Partial<Character> & {
+  abilityRolls?: number[] // raw rolled values before assignment
+  rollsUsed?: number // 0 or 1 (max 1 reroll)
 }
 
 export interface DynamicStateForAPI {

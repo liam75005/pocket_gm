@@ -1,7 +1,33 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
+import { LOCALES, DEFAULT_LOCALE, type Lang } from '@/lib/i18n/config'
+
+function detectLocale(request: NextRequest): Lang {
+  const cookieLocale = request.cookies.get('NEXT_LOCALE')?.value
+  if (cookieLocale && (LOCALES as readonly string[]).includes(cookieLocale)) return cookieLocale as Lang
+
+  const acceptLanguage = request.headers.get('accept-language') || ''
+  for (const part of acceptLanguage.split(',')) {
+    const code = part.trim().split(';')[0].split('-')[0]
+    if ((LOCALES as readonly string[]).includes(code)) return code as Lang
+  }
+  return DEFAULT_LOCALE
+}
 
 export async function proxy(request: NextRequest) {
+  const { pathname } = request.nextUrl
+
+  const pathnameHasLocale = LOCALES.some(
+    locale => pathname === `/${locale}` || pathname.startsWith(`/${locale}/`)
+  )
+
+  if (!pathnameHasLocale) {
+    const locale = detectLocale(request)
+    const url = request.nextUrl.clone()
+    url.pathname = `/${locale}${pathname}`
+    return NextResponse.redirect(url)
+  }
+
   let supabaseResponse = NextResponse.next({ request })
 
   const supabase = createServerClient(
@@ -23,14 +49,13 @@ export async function proxy(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser()
 
-  const isProtected =
-    request.nextUrl.pathname.startsWith('/play') ||
-    request.nextUrl.pathname.startsWith('/api/game') ||
-    request.nextUrl.pathname.startsWith('/api/saves')
+  const isProtected = /^\/(en|fr)\/(play|new-game)(\/|$)/.test(pathname)
 
   if (isProtected && !user) {
+    const localeMatch = pathname.match(/^\/(en|fr)\//)
+    const locale = localeMatch ? localeMatch[1] : DEFAULT_LOCALE
     const url = request.nextUrl.clone()
-    url.pathname = '/login'
+    url.pathname = `/${locale}/login`
     return NextResponse.redirect(url)
   }
 
@@ -38,5 +63,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/play', '/play/:path*', '/api/game/:path*', '/api/saves/:path*'],
+  matcher: ['/((?!api|auth|_next|favicon.ico).*)'],
 }

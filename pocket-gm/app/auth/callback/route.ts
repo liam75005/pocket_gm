@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
+import { isLang, DEFAULT_LOCALE } from '@/lib/i18n/config'
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
+  const langParam = searchParams.get('lang')
+  const lang = langParam && isLang(langParam) ? langParam : DEFAULT_LOCALE
 
   if (code) {
-    const response = NextResponse.redirect(`${origin}/play`)
+    const response = NextResponse.redirect(`${origin}/${lang}/play`)
 
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -29,5 +32,5 @@ export async function GET(request: NextRequest) {
     if (!error) return response
   }
 
-  return NextResponse.redirect(`${origin}/login?error=auth_callback_error`)
+  return NextResponse.redirect(`${origin}/${lang}/login?error=auth_callback_error`)
 }
