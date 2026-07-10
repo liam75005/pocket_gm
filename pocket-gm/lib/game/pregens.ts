@@ -1,8 +1,8 @@
 import type { Lang } from '@/lib/i18n/config'
 import type { Character } from '@/lib/types'
-import type { AbilityId, ClassData } from './srd-types'
+import type { AbilityId, ClassData, BackgroundData } from './srd-types'
 import { assembleCharacter } from './assemble-character'
-import { getClasses } from './srd-data'
+import { getClasses, getBackgrounds } from './srd-data'
 
 export type PregenCharacter = Omit<Character, 'id' | 'user_id'> & { pregen_id: string }
 
@@ -64,6 +64,11 @@ function defaultSpellSelection(classId: string, lang: Lang): { cantrips: string[
 export function getPregens(lang: Lang): PregenCharacter[] {
   return SPECS.map(spec => {
     const { cantrips, spellsKnown } = defaultSpellSelection(spec.classId, lang)
+    const cls = (getClasses(lang) as Record<string, ClassData>)[spec.classId]
+    const bg = (getBackgrounds(lang) as Record<string, BackgroundData>)[spec.backgroundId]
+    const chosenSkills = cls.skill_choices.from
+      .filter(s => !bg.skills.includes(s))
+      .slice(0, cls.skill_choices.count)
     const character = assembleCharacter({
       lang,
       name: spec.name[lang],
@@ -73,6 +78,9 @@ export function getPregens(lang: Lang): PregenCharacter[] {
       subclassId: spec.subclassId,
       backgroundId: spec.backgroundId,
       abilityScores: spec.abilityScores,
+      bonusPrimary: bg.asi.primary,
+      bonusSecondary: bg.asi.secondary,
+      chosenSkills,
       cantrips,
       spellsKnown,
     })

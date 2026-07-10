@@ -31,8 +31,8 @@ export const en = {
     title: 'New Game',
     steps: {
       game_select: 'Game', campaign_select: 'Campaign', character_method: 'Character',
-      pregen_select: 'Character', name: 'Name', species: 'Species', class: 'Class',
-      subclass: 'Style', background: 'Background', ability_scores: 'Abilities',
+      pregen_select: 'Character', pregen_customize: 'Customize', name: 'Name', species: 'Species', class: 'Class',
+      subclass: 'Style', background: 'Background', skills: 'Skills', ability_scores: 'Abilities',
       spells: 'Spells', review: 'Review',
     },
     gameSelect: { title: 'Choose a Game System', comingSoon: 'Coming soon' },
@@ -43,15 +43,25 @@ export const en = {
       customTitle: 'Create My Own', customDesc: 'Build a character from scratch: species, class, background, and ability scores.',
     },
     pregenSelect: { title: 'Choose Your Hero', hp: 'HP', ac: 'AC' },
+    pregenCustomize: {
+      title: 'Make This Hero Yours', nameLabel: 'Name', pronounsLabel: 'Pronouns',
+      pronounsHeHim: 'He/him', pronounsSheHer: 'She/her', pronounsTheyThem: 'They/them', pronounsCustom: 'Custom',
+      customPlaceholder: 'Enter pronouns', nameHint: 'Used by the GM for narration only — no mechanical effect.',
+    },
     name: { title: 'Name Your Character', placeholder: 'Character name' },
     species: { title: 'Choose a Species', subraceTitle: 'Choose a Subrace', speed: 'Speed', size: 'Size', traits: 'Traits' },
     classStep: { title: 'Choose a Class', hitDie: 'Hit Die', savingThrows: 'Saving Throws', playstyle: 'Playstyle' },
-    background: { title: 'Choose a Background', skills: 'Skills', tools: 'Tools', feat: 'Feat', asi: 'Ability Score Increase' },
+    background: { title: 'Choose a Background', skills: 'Skills', tools: 'Tools', feat: 'Feat', asi: 'Ability Score Increase', asiNote: 'Grants +2 to one ability score and +1 to another — you\'ll allocate these during Ability Scores.' },
+    skillsStep: {
+      title: 'Choose Your Skills', chooseN: 'Choose {n} skills ({cls}):', fromBackground: 'from background',
+    },
     abilityScores: {
       title: 'Ability Scores', standardTab: 'Standard Array', rollTab: 'Roll Dice',
       rollButton: 'Roll', rerollButton: 'Reroll All', rerollUsed: 'Reroll used',
       assignPrompt: 'Assign each value to an ability score.', backgroundBonus: 'Background bonus',
       final: 'Final', rolled: 'Rolled', unassigned: 'Unassigned',
+      bonusTitle: 'Background Bonus Allocation', bonusDesc: 'Your background ({bg}) grants +2 to one ability score and +1 to another. Allocate your bonuses:',
+      bonusPlusTwo: '+2 to', bonusPlusOne: '+1 to',
     },
     spells: { title: 'Choose Your Spells', cantrips: 'Cantrips', spellsKnown: 'Spells Known', chooseUpTo: 'Choose up to {n}' },
     review: {

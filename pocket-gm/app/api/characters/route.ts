@@ -31,6 +31,7 @@ export async function POST(request: NextRequest) {
   const { data, error } = await supabase.from('characters').insert({
     user_id: user.id,
     name: body.name,
+    pronouns: body.pronouns ?? null,
     species: body.species,
     subrace: body.subrace ?? null,
     class: body.class,

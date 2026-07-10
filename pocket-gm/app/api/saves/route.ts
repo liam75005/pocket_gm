@@ -7,7 +7,7 @@ export async function GET(request: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const slot = request.nextUrl.searchParams.get('slot')
-  let query = supabase.from('saves').select('*').eq('user_id', user.id)
+  let query = supabase.from('saves').select('*, characters(name)').eq('user_id', user.id)
   if (slot !== null) query = query.eq('slot', parseInt(slot))
 
   const { data, error } = await query

@@ -15,8 +15,10 @@ import type { AbilityId, SpeciesData, ClassData, BackgroundData } from '@/lib/ga
 import type { Character } from '@/lib/types'
 
 type WizardStep =
-  | 'game_select' | 'campaign_select' | 'character_method' | 'pregen_select'
-  | 'name' | 'species' | 'class' | 'subclass' | 'background' | 'ability_scores' | 'spells' | 'review'
+  | 'game_select' | 'campaign_select' | 'character_method' | 'pregen_select' | 'pregen_customize'
+  | 'name' | 'species' | 'class' | 'subclass' | 'background' | 'skills' | 'ability_scores' | 'spells' | 'review'
+
+type PronounChoice = 'he/him' | 'she/her' | 'they/them' | 'custom' | ''
 
 type DraftCharacter = Omit<Character, 'id' | 'user_id'>
 
@@ -82,6 +84,13 @@ export default function NewGamePage() {
   const [rolledValues, setRolledValues] = useState<number[]>([])
   const [rollsUsed, setRollsUsed] = useState(0)
   const [assignment, setAssignment] = useState<Partial<Record<AbilityId, number>>>({})
+  const [bonusPrimary, setBonusPrimary] = useState<AbilityId | ''>('')
+  const [bonusSecondary, setBonusSecondary] = useState<AbilityId | ''>('')
+
+  const [selectedSkills, setSelectedSkills] = useState<string[]>([])
+
+  const [pronounsChoice, setPronounsChoice] = useState<PronounChoice>('')
+  const [customPronouns, setCustomPronouns] = useState('')
 
   const [cantrips, setCantrips] = useState<string[]>([])
   const [spellsKnown, setSpellsKnown] = useState<string[]>([])
@@ -99,12 +108,12 @@ export default function NewGamePage() {
     'game_select', 'campaign_select', 'character_method',
     'name', 'species', 'class',
     ...(hasSubclass ? ['subclass' as const] : []),
-    'background', 'ability_scores',
+    'background', 'skills', 'ability_scores',
     ...(isCaster ? ['spells' as const] : []),
     'review',
   ], [hasSubclass, isCaster])
 
-  const pregenSteps: WizardStep[] = ['game_select', 'campaign_select', 'character_method', 'pregen_select', 'review']
+  const pregenSteps: WizardStep[] = ['game_select', 'campaign_select', 'character_method', 'pregen_select', 'pregen_customize', 'review']
   const stepList = path === 'pregen' ? pregenSteps : customSteps
 
   // fetch pregens when entering that step
@@ -130,12 +139,30 @@ export default function NewGamePage() {
     setSubclassId(null)
     setCantrips([])
     setSpellsKnown([])
+    setSelectedSkills([])
+  }
+
+  const [prevBackgroundId, setPrevBackgroundId] = useState(backgroundId)
+  if (backgroundId !== prevBackgroundId) {
+    setPrevBackgroundId(backgroundId)
+    setSelectedSkills([])
+    setBonusPrimary('')
+    setBonusSecondary('')
   }
 
   const [prevAbilityMethod, setPrevAbilityMethod] = useState(abilityMethod)
   if (abilityMethod !== prevAbilityMethod) {
     setPrevAbilityMethod(abilityMethod)
     setAssignment({})
+  }
+
+  const [prevSelectedPregenId, setPrevSelectedPregenId] = useState(selectedPregenId)
+  if (selectedPregenId !== prevSelectedPregenId) {
+    setPrevSelectedPregenId(selectedPregenId)
+    const p = pregens.find(pg => pg.pregen_id === selectedPregenId)
+    setName(p ? p.name : '')
+    setPronounsChoice('')
+    setCustomPronouns('')
   }
 
   // Default spell selection once entering the spells step for the first time
@@ -163,17 +190,22 @@ export default function NewGamePage() {
   }, [assignment, sourceValues])
 
   const draftCharacter: DraftCharacter | null = useMemo(() => {
-    if (!speciesId || !classId || !backgroundId || !baseScores) return null
+    if (!speciesId || !classId || !backgroundId || !baseScores || !bonusPrimary || !bonusSecondary) return null
     try {
       return assembleCharacter({
         lang, name: name.trim() || '—', speciesId, subraceId, classId, subclassId, backgroundId,
-        abilityScores: baseScores, cantrips, spellsKnown, campaign: 'five_oaks',
+        abilityScores: baseScores, bonusPrimary, bonusSecondary, chosenSkills: selectedSkills,
+        cantrips, spellsKnown, campaign: 'five_oaks',
       })
     } catch { return null }
-  }, [lang, name, speciesId, subraceId, classId, subclassId, backgroundId, baseScores, cantrips, spellsKnown])
+  }, [lang, name, speciesId, subraceId, classId, subclassId, backgroundId, baseScores, bonusPrimary, bonusSecondary, selectedSkills, cantrips, spellsKnown])
 
   const selectedPregen = pregens.find(p => p.pregen_id === selectedPregenId) || null
-  const reviewCharacter: DraftCharacter | null = path === 'pregen' ? selectedPregen : draftCharacter
+  const pronounsFinal = pronounsChoice === 'custom' ? customPronouns.trim() : pronounsChoice
+  const customizedPregen: DraftCharacter | null = selectedPregen
+    ? { ...selectedPregen, name: name.trim() || selectedPregen.name, pronouns: pronounsFinal || undefined }
+    : null
+  const reviewCharacter: DraftCharacter | null = path === 'pregen' ? customizedPregen : draftCharacter
 
   function goNext() {
     const idx = stepList.indexOf(step)
@@ -191,12 +223,14 @@ export default function NewGamePage() {
       case 'campaign_select': return true
       case 'character_method': return path !== null
       case 'pregen_select': return !!selectedPregenId
+      case 'pregen_customize': { const n = name.trim().length; return n >= 2 && n <= 40 }
       case 'name': return name.trim().length > 0
       case 'species': return !!speciesId && (!selectedSpecies?.subraces || !!subraceId)
       case 'class': return !!classId
       case 'subclass': return !!subclassId
       case 'background': return !!backgroundId
-      case 'ability_scores': return !!baseScores
+      case 'skills': return !!selectedClass && selectedSkills.length === selectedClass.skill_choices.count
+      case 'ability_scores': return !!baseScores && !!bonusPrimary && !!bonusSecondary
       case 'spells': return true
       case 'review': return true
       default: return false
@@ -234,6 +268,13 @@ export default function NewGamePage() {
       if (prev.includes(spellName)) return prev.filter(x => x !== spellName)
       if (prev.length >= (selectedClass?.spells_known_at_1 || 0)) return prev
       return [...prev, spellName]
+    })
+  }
+  function toggleSkill(skill: string) {
+    setSelectedSkills(prev => {
+      if (prev.includes(skill)) return prev.filter(x => x !== skill)
+      if (prev.length >= (selectedClass?.skill_choices.count || 0)) return prev
+      return [...prev, skill]
     })
   }
 
@@ -315,6 +356,46 @@ export default function NewGamePage() {
             )
           })}
         </div>
+      </div>
+    )
+  }
+
+  function PregenCustomizeStep() {
+    if (!selectedPregen) return null
+    return (
+      <div>
+        <div style={{ fontFamily: "'Cinzel Decorative', cursive", fontSize: '16px', color: C.go, marginBottom: '14px' }}>{d.pregenCustomize.title}</div>
+
+        <div style={sectionLabel}>{d.pregenCustomize.nameLabel}</div>
+        <input
+          value={name}
+          onChange={e => setName(e.target.value)}
+          placeholder={selectedPregen.name}
+          maxLength={40}
+          style={{ width: '100%', fontFamily: "'Crimson Pro', serif", fontSize: '16px', padding: '12px', background: C.lt, border: `1px solid ${C.br}`, color: C.ink, outline: 'none', boxSizing: 'border-box', marginBottom: '6px' }}
+        />
+        <div style={{ fontSize: '11px', color: C.ft, marginBottom: '16px' }}>{d.pregenCustomize.nameHint}</div>
+
+        <div style={sectionLabel}>{d.pregenCustomize.pronounsLabel}</div>
+        <select
+          value={pronounsChoice}
+          onChange={e => setPronounsChoice(e.target.value as PronounChoice)}
+          style={{ width: '100%', background: C.lt, border: `1px solid ${C.br}`, color: C.ink, padding: '10px', fontSize: '14px', marginBottom: '10px' }}
+        >
+          <option value="">—</option>
+          <option value="he/him">{d.pregenCustomize.pronounsHeHim}</option>
+          <option value="she/her">{d.pregenCustomize.pronounsSheHer}</option>
+          <option value="they/them">{d.pregenCustomize.pronounsTheyThem}</option>
+          <option value="custom">{d.pregenCustomize.pronounsCustom}</option>
+        </select>
+        {pronounsChoice === 'custom' && (
+          <input
+            value={customPronouns}
+            onChange={e => setCustomPronouns(e.target.value)}
+            placeholder={d.pregenCustomize.customPlaceholder}
+            style={{ width: '100%', fontFamily: "'Crimson Pro', serif", fontSize: '14px', padding: '10px', background: C.lt, border: `1px solid ${C.br}`, color: C.ink, outline: 'none', boxSizing: 'border-box' }}
+          />
+        )}
       </div>
     )
   }
@@ -412,10 +493,47 @@ export default function NewGamePage() {
               <div style={{ fontSize: '11px', color: C.dim, lineHeight: 1.5, marginBottom: '6px' }}>{bg.description}</div>
               <div style={{ fontFamily: "'Cinzel', serif", fontSize: '9px', color: C.ft, lineHeight: 1.8 }}>
                 {d.background.skills}: {bg.skills.join(', ')}<br />
-                {d.background.asi}: +2 {al[bg.asi.primary]}, +1 {al[bg.asi.secondary]}
+                {d.background.asi}: {d.background.asiNote}
               </div>
             </div>
           ))}
+        </div>
+      </div>
+    )
+  }
+
+  function SkillsStep() {
+    if (!selectedClass || !selectedBackground) return null
+    const count = selectedClass.skill_choices.count
+    const bgSkills = selectedBackground.skills
+    return (
+      <div>
+        <div style={{ fontFamily: "'Cinzel Decorative', cursive", fontSize: '16px', color: C.go, marginBottom: '14px' }}>{d.skillsStep.title}</div>
+        <div style={{ fontSize: '12px', color: C.dim, marginBottom: '10px' }}>
+          {d.skillsStep.chooseN.replace('{n}', String(count)).replace('{cls}', selectedClass.name)}
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+          {selectedClass.skill_choices.from.map(skill => {
+            const fromBg = bgSkills.includes(skill)
+            const checked = fromBg || selectedSkills.includes(skill)
+            return (
+              <label
+                key={skill}
+                onClick={() => { if (!fromBg) toggleSkill(skill) }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '4px',
+                  background: checked ? 'rgba(42,107,58,.2)' : C.cd,
+                  border: `1px solid ${checked ? C.gl : C.br}`,
+                  padding: '5px 9px', fontSize: '12px',
+                  cursor: fromBg ? 'not-allowed' : 'pointer',
+                  opacity: fromBg ? 0.7 : 1,
+                }}
+              >
+                <input type="checkbox" checked={checked} disabled={fromBg} readOnly />
+                {skill}{fromBg ? ` ✓ ${d.skillsStep.fromBackground}` : ''}
+              </label>
+            )
+          })}
         </div>
       </div>
     )
@@ -457,7 +575,7 @@ export default function NewGamePage() {
               {ABILITY_ORDER.map(k => {
                 const idx = assignment[k]
                 const base = idx !== undefined ? sourceValues[idx] : null
-                const bonus = selectedBackground ? (selectedBackground.asi.primary === k ? 2 : selectedBackground.asi.secondary === k ? 1 : 0) : 0
+                const bonus = bonusPrimary === k ? 2 : bonusSecondary === k ? 1 : 0
                 const final = base !== null ? base + bonus : null
                 return (
                   <div key={k} style={{ background: C.cd, border: `1px solid ${C.br}`, padding: '10px', textAlign: 'center' }}>
@@ -487,6 +605,43 @@ export default function NewGamePage() {
               })}
             </div>
           </>
+        )}
+
+        {selectedBackground && (
+          <div style={{ marginTop: '18px' }}>
+            <div style={sectionLabel}>{d.abilityScores.bonusTitle}</div>
+            <div style={{ fontSize: '12px', color: C.dim, marginBottom: '10px' }}>
+              {d.abilityScores.bonusDesc.replace('{bg}', selectedBackground.name)}
+            </div>
+            <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ fontFamily: "'Cinzel', serif", fontSize: '10px', color: C.ft, marginBottom: '4px' }}>{d.abilityScores.bonusPlusTwo}</div>
+                <select
+                  value={bonusPrimary}
+                  onChange={e => {
+                    const v = e.target.value as AbilityId | ''
+                    setBonusPrimary(v)
+                    setBonusSecondary(prev => prev === v ? '' : prev)
+                  }}
+                  style={{ background: C.lt, border: `1px solid ${C.br}`, color: C.ink, padding: '6px', fontSize: '13px' }}
+                >
+                  <option value="">{d.abilityScores.unassigned}</option>
+                  {ABILITY_ORDER.map(k => <option key={k} value={k}>{al[k]}</option>)}
+                </select>
+              </div>
+              <div>
+                <div style={{ fontFamily: "'Cinzel', serif", fontSize: '10px', color: C.ft, marginBottom: '4px' }}>{d.abilityScores.bonusPlusOne}</div>
+                <select
+                  value={bonusSecondary}
+                  onChange={e => setBonusSecondary(e.target.value as AbilityId | '')}
+                  style={{ background: C.lt, border: `1px solid ${C.br}`, color: C.ink, padding: '6px', fontSize: '13px' }}
+                >
+                  <option value="">{d.abilityScores.unassigned}</option>
+                  {ABILITY_ORDER.filter(k => k !== bonusPrimary).map(k => <option key={k} value={k}>{al[k]}</option>)}
+                </select>
+              </div>
+            </div>
+          </div>
         )}
 
         {draftCharacter && (
@@ -544,7 +699,7 @@ export default function NewGamePage() {
 
     return (
       <div>
-        <div style={{ fontFamily: "'Cinzel Decorative', cursive", fontSize: '18px', color: C.go, marginBottom: '4px' }}>{rc.name}</div>
+        <div style={{ fontFamily: "'Cinzel Decorative', cursive", fontSize: '18px', color: C.go, marginBottom: '4px' }}>{rc.name}{rc.pronouns ? ` (${rc.pronouns})` : ''}</div>
         <div style={{ fontFamily: "'Cinzel', serif", fontSize: '10px', color: C.rl, letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '14px' }}>
           {speciesName}{subraceName ? ` (${subraceName})` : ''} · {className}{subclassName ? ` – ${subclassName}` : ''} · {backgroundName} · {r.level} 1
         </div>
@@ -605,7 +760,7 @@ export default function NewGamePage() {
   }
 
   function renderDraftSummary() {
-    if (path !== 'custom' || !['name', 'species', 'class', 'subclass', 'background', 'ability_scores', 'spells'].includes(step)) return null
+    if (path !== 'custom' || !['name', 'species', 'class', 'subclass', 'background', 'skills', 'ability_scores', 'spells'].includes(step)) return null
     return (
       <div style={{ background: C.mid, border: `1px solid ${C.br}`, padding: '14px', minWidth: '220px', flex: '0 0 240px', alignSelf: 'flex-start' }}>
         <div style={{ fontFamily: "'Cinzel', serif", fontSize: '9px', letterSpacing: '2px', color: C.ft, textTransform: 'uppercase', marginBottom: '10px' }}>{d.review.title}</div>
@@ -631,11 +786,13 @@ export default function NewGamePage() {
       case 'campaign_select': return CampaignSelectStep()
       case 'character_method': return CharacterMethodStep()
       case 'pregen_select': return PregenSelectStep()
+      case 'pregen_customize': return PregenCustomizeStep()
       case 'name': return NameStep()
       case 'species': return SpeciesStep()
       case 'class': return ClassStep()
       case 'subclass': return SubclassStep()
       case 'background': return BackgroundStep()
+      case 'skills': return SkillsStep()
       case 'ability_scores': return AbilityScoresStep()
       case 'spells': return SpellsStep()
       case 'review': return ReviewStep()
@@ -646,7 +803,7 @@ export default function NewGamePage() {
   const isReview = step === 'review'
 
   return (
-    <div style={{ minHeight: '100vh', background: C.bg, color: C.ink, fontFamily: "'Crimson Pro', serif" }}>
+    <div style={{ height: '100vh', overflowY: 'auto', WebkitOverflowScrolling: 'touch', touchAction: 'pan-y', background: C.bg, color: C.ink, fontFamily: "'Crimson Pro', serif" }}>
       <div style={{ background: C.cd, borderBottom: `2px solid ${C.go}`, padding: '12px 16px' }}>
         <div style={{ fontFamily: "'Cinzel Decorative', cursive", fontSize: '15px', color: C.go }}>{d.title}</div>
         <div style={{ display: 'flex', gap: '4px', marginTop: '8px', overflowX: 'auto' }}>

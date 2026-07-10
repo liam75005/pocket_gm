@@ -7,20 +7,23 @@ import { abilityMod, computeAC, computeHp, parseEquipmentList } from './derive'
 export interface AssembleInput {
   lang: Lang
   name: string
+  pronouns?: string
   speciesId: string
   subraceId: string | null
   classId: string
   subclassId: string | null
   backgroundId: string
-  abilityScores: Record<AbilityId, number> // base values, before background ASI
+  abilityScores: Record<AbilityId, number> // base values, before background bonus
+  bonusPrimary: AbilityId // +2 background bonus, player-chosen
+  bonusSecondary: AbilityId // +1 background bonus, player-chosen
+  chosenSkills: string[] // player-picked class skill proficiencies (length === cls.skill_choices.count)
   cantrips: string[]
   spellsKnown: string[]
   campaign?: string
 }
 
-function autoPickSkills(cls: ClassData, speciesId: string, bg: BackgroundData, lang: Lang): string[] {
-  const picked = new Set<string>(bg.skills)
-  cls.skill_choices.from.filter(s => !picked.has(s)).slice(0, cls.skill_choices.count).forEach(s => picked.add(s))
+function finalizeSkills(cls: ClassData, speciesId: string, bg: BackgroundData, chosenSkills: string[], lang: Lang): string[] {
+  const picked = new Set<string>([...bg.skills, ...chosenSkills])
 
   const bonusCount = speciesId === 'human' ? 1 : speciesId === 'half_elf' ? 2 : 0
   if (bonusCount > 0) {
@@ -44,8 +47,8 @@ export function assembleCharacter(input: AssembleInput): Omit<Character, 'id' | 
   if (!species || !cls || !bg) throw new Error('Unknown species/class/background id')
 
   const finalScores: Record<AbilityId, number> = { ...input.abilityScores }
-  finalScores[bg.asi.primary] += 2
-  finalScores[bg.asi.secondary] += 1
+  finalScores[input.bonusPrimary] += 2
+  finalScores[input.bonusSecondary] += 1
 
   const conMod = abilityMod(finalScores.con)
   const dexMod = abilityMod(finalScores.dex)
@@ -74,6 +77,7 @@ export function assembleCharacter(input: AssembleInput): Omit<Character, 'id' | 
 
   return {
     name: input.name,
+    pronouns: input.pronouns,
     species: input.speciesId,
     subrace: input.subraceId ?? undefined,
     class: input.classId,
@@ -87,7 +91,7 @@ export function assembleCharacter(input: AssembleInput): Omit<Character, 'id' | 
     hp_max: hpMax, ac, speed: species.speed,
 
     saving_throw_profs: cls.saving_throws,
-    skill_profs: autoPickSkills(cls, input.speciesId, bg, input.lang),
+    skill_profs: finalizeSkills(cls, input.speciesId, bg, input.chosenSkills, input.lang),
     armor_profs: cls.armor_profs,
     weapon_profs: cls.weapon_profs,
     tool_profs: bg.tools,

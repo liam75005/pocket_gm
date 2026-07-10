@@ -69,7 +69,7 @@ const defaultG = (): G => ({
 
 // ─── Save/Load API helpers ───────────────────────────────────────────────────
 
-interface SlotData { cid: string; s: Omit<G, 'char' | 'pendRoll' | 'rollsDone' | 'rollCnt' | 'awaitingReaction' | 'gameEnded' | 'tokens'>; log: LogMsg[]; at: string; t: number }
+interface SlotData { cid: string; charName?: string; s: Omit<G, 'char' | 'pendRoll' | 'rollsDone' | 'rollCnt' | 'awaitingReaction' | 'gameEnded' | 'tokens'>; log: LogMsg[]; at: string; t: number }
 
 async function apiSave(slot: number, cid: string, g: G, log: LogMsg[]) {
   const body: SlotData = { cid, s: { hp: g.hp, hpMax: g.hpMax, inv: g.inv, conds: g.conds, notes: g.notes, gold: g.gold, history: g.history, spUsed: g.spUsed, dSucc: g.dSucc, dFail: g.dFail, inCombat: g.inCombat, combatRound: g.combatRound, initiative: g.initiative, currentTurn: g.currentTurn, battleMap: g.battleMap, battleMapLegend: g.battleMapLegend }, log, at: new Date().toLocaleString(), t: g.history.filter(m => m.role === 'user').length }
@@ -80,7 +80,8 @@ async function apiLoad(slot: number): Promise<{ data: SlotData } | null> {
   const res = await fetch(`/api/saves?slot=${slot}`)
   const json = await res.json()
   if (!json.saves || !json.saves[0]) return null
-  return { data: json.saves[0].state as SlotData }
+  const row = json.saves[0]
+  return { data: { ...(row.state as SlotData), charName: row.characters?.name } }
 }
 
 async function apiDelete(slot: number) {
@@ -91,7 +92,10 @@ async function apiLoadAll(): Promise<{ slot: number; data: SlotData }[]> {
   const res = await fetch('/api/saves')
   const json = await res.json()
   if (!json.saves) return []
-  return json.saves.map((s: { slot: number; state: SlotData }) => ({ slot: s.slot, data: s.state }))
+  return json.saves.map((s: { slot: number; state: SlotData; characters?: { name: string } }) => ({
+    slot: s.slot,
+    data: { ...s.state, charName: s.characters?.name },
+  }))
 }
 
 async function fetchCharacter(id: string): Promise<Character | null> {
@@ -770,7 +774,7 @@ function PlayPageInner() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '14px', paddingBottom: '14px', borderBottom: '1px solid #3a3020' }}>
                 {allSaves.filter(s => s.slot !== 0).map(s => (
                   <div key={s.slot} onClick={() => loadGame(s.slot)} style={{ background: 'rgba(42,107,58,.1)', border: '1px solid #3d9954', padding: '9px 11px', cursor: 'pointer' }}>
-                    <div style={{ fontFamily: "'Cinzel', serif", fontSize: '11px', color: '#80e090', fontWeight: 600 }}>{fmt(dp.saves.slotChar, { slot: s.slot, name: s.data.cid })}</div>
+                    <div style={{ fontFamily: "'Cinzel', serif", fontSize: '11px', color: '#80e090', fontWeight: 600 }}>{fmt(dp.saves.slotChar, { slot: s.slot, name: s.data.charName || s.data.cid })}</div>
                     <div style={{ fontFamily: "'Cinzel', serif", fontSize: '8px', color: '#7a6840', letterSpacing: '1px', marginTop: '2px' }}>{fmt(dp.saves.turns, { at: s.data.at, t: s.data.t })}</div>
                   </div>
                 ))}
@@ -1142,7 +1146,7 @@ function SavesModal({ g, dict, allSaves, onLoad, onSave, onDelete, onClose }: {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
                     <div style={{ fontFamily: "'Cinzel', serif", fontSize: '11px', color: '#80e090', fontWeight: 600 }}>
-                      {fmt(dp.saves.slotChar, { slot, name: g.char?.id === d.cid ? g.char.name : d.cid })}
+                      {fmt(dp.saves.slotChar, { slot, name: g.char?.id === d.cid ? g.char.name : (d.charName || d.cid) })}
                     </div>
                     <div style={{ fontFamily: "'Cinzel', serif", fontSize: '8px', color: '#7a6840', letterSpacing: '1px', marginTop: '2px' }}>
                       {fmt(dp.saves.turns, { at: d.at, t: d.t })}

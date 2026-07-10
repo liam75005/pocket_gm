@@ -22,7 +22,7 @@ function proficiencyBonus(level: number): number {
 
 const HEADERS: Record<Lang, Record<string, string>> = {
   en: {
-    sheet: 'CHARACTER SHEET', name: 'Name', species: 'Species', class: 'Class', level: 'Level', background: 'Background',
+    sheet: 'CHARACTER SHEET', name: 'Name', pronouns: 'Pronouns', species: 'Species', class: 'Class', level: 'Level', background: 'Background',
     abilityScores: 'ABILITY SCORES', combatStats: 'COMBAT STATS', hp: 'HP', max: 'max', ac: 'AC', speed: 'Speed', ft: 'ft',
     pb: 'Proficiency Bonus', init: 'Initiative',
     savingThrows: 'SAVING THROWS', skillProfs: 'SKILL PROFICIENCIES', profs: 'PROFICIENCIES',
@@ -33,7 +33,7 @@ const HEADERS: Record<Lang, Record<string, string>> = {
     sessionNotes: 'Session notes (resources used, etc.):', gp: 'gp',
   },
   fr: {
-    sheet: 'FICHE DE PERSONNAGE', name: 'Nom', species: 'Espèce', class: 'Classe', level: 'Niveau', background: 'Historique',
+    sheet: 'FICHE DE PERSONNAGE', name: 'Nom', pronouns: 'Pronoms', species: 'Espèce', class: 'Classe', level: 'Niveau', background: 'Historique',
     abilityScores: 'CARACTÉRISTIQUES', combatStats: 'STATS DE COMBAT', hp: 'PV', max: 'max', ac: 'CA', speed: 'Vitesse', ft: 'pieds',
     pb: 'Bonus de maîtrise', init: 'Initiative',
     savingThrows: 'JETS DE SAUVEGARDE', skillProfs: 'MAÎTRISES DE COMPÉTENCES', profs: 'MAÎTRISES',
@@ -74,6 +74,7 @@ function formatCharacterSheet(character: Character, lang: Lang): string {
   const lines: string[] = []
   lines.push(`=== ${h.sheet} ===`)
   lines.push(`${h.name}: ${character.name}`)
+  if (character.pronouns) lines.push(`${h.pronouns}: ${character.pronouns}`)
   lines.push(`${h.species}: ${speciesName}${subraceName ? ` (${subraceName})` : ''}`)
   lines.push(`${h.class}: ${className}${subclassName ? ` – ${subclassName}` : ''} (${h.level} ${character.level})`)
   lines.push(`${h.background}: ${bgName}`)

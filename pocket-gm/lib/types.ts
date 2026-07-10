@@ -79,6 +79,7 @@ export interface Character {
   id: string
   user_id: string
   name: string
+  pronouns?: string
   species: string
   subrace?: string
   class: string

@@ -31,8 +31,8 @@ export const fr = {
     title: 'Nouvelle partie',
     steps: {
       game_select: 'Jeu', campaign_select: 'Campagne', character_method: 'Personnage',
-      pregen_select: 'Personnage', name: 'Nom', species: 'Espèce', class: 'Classe',
-      subclass: 'Style', background: 'Historique', ability_scores: 'Caractéristiques',
+      pregen_select: 'Personnage', pregen_customize: 'Personnaliser', name: 'Nom', species: 'Espèce', class: 'Classe',
+      subclass: 'Style', background: 'Historique', skills: 'Compétences', ability_scores: 'Caractéristiques',
       spells: 'Sorts', review: 'Résumé',
     },
     gameSelect: { title: 'Choisissez un système de jeu', comingSoon: 'Bientôt disponible' },
@@ -43,15 +43,25 @@ export const fr = {
       customTitle: 'Créer mon personnage', customDesc: 'Construisez un personnage de A à Z : espèce, classe, historique et caractéristiques.',
     },
     pregenSelect: { title: 'Choisissez votre héros', hp: 'PV', ac: 'CA' },
+    pregenCustomize: {
+      title: 'Personnalisez ce héros', nameLabel: 'Nom', pronounsLabel: 'Pronoms',
+      pronounsHeHim: 'Il/lui', pronounsSheHer: 'Elle', pronounsTheyThem: 'Iel', pronounsCustom: 'Personnalisé',
+      customPlaceholder: 'Entrez les pronoms', nameHint: 'Utilisé par le MJ pour la narration uniquement — aucun effet mécanique.',
+    },
     name: { title: 'Nommez votre personnage', placeholder: 'Nom du personnage' },
     species: { title: 'Choisissez une espèce', subraceTitle: 'Choisissez une sous-race', speed: 'Vitesse', size: 'Taille', traits: 'Traits' },
     classStep: { title: 'Choisissez une classe', hitDie: 'Dé de vie', savingThrows: 'Jets de sauvegarde', playstyle: 'Style de jeu' },
-    background: { title: 'Choisissez un historique', skills: 'Compétences', tools: 'Outils', feat: 'Don', asi: 'Bonus de caractéristiques' },
+    background: { title: 'Choisissez un historique', skills: 'Compétences', tools: 'Outils', feat: 'Don', asi: 'Bonus de caractéristiques', asiNote: 'Accorde +2 à une caractéristique et +1 à une autre — vous les attribuerez à l\'étape Caractéristiques.' },
+    skillsStep: {
+      title: 'Choisissez vos compétences', chooseN: 'Choisissez {n} compétences ({cls}) :', fromBackground: 'de l\'historique',
+    },
     abilityScores: {
       title: 'Caractéristiques', standardTab: 'Tableau standard', rollTab: 'Lancer les dés',
       rollButton: 'Lancer', rerollButton: 'Tout relancer', rerollUsed: 'Relance utilisée',
       assignPrompt: 'Attribuez chaque valeur à une caractéristique.', backgroundBonus: 'Bonus d\'historique',
       final: 'Final', rolled: 'Lancé', unassigned: 'Non attribué',
+      bonusTitle: 'Attribution du bonus d\'historique', bonusDesc: 'Votre historique ({bg}) accorde +2 à une caractéristique et +1 à une autre. Attribuez vos bonus :',
+      bonusPlusTwo: '+2 à', bonusPlusOne: '+1 à',
     },
     spells: { title: 'Choisissez vos sorts', cantrips: 'Sorts mineurs', spellsKnown: 'Sorts connus', chooseUpTo: 'Choisissez jusqu\'à {n}' },
     review: {
