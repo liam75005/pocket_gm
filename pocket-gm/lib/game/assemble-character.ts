@@ -58,7 +58,7 @@ export function assembleCharacter(input: AssembleInput): Omit<Character, 'id' | 
   const equipment: EquipmentItem[] = [...parseEquipmentList(kitRaw), ...parseEquipmentList(bg.equipment)]
   const equipmentNames = [...kitRaw, ...bg.equipment]
 
-  const ac = computeAC(input.classId, equipmentNames, dexMod, conMod, wisMod)
+  const ac = computeAC(input.classId, equipmentNames, dexMod, conMod, wisMod, input.subclassId)
   const hpMax = computeHp(cls.hit_die, conMod)
 
   const features: Feature[] = [

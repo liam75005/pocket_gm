@@ -62,6 +62,12 @@ export interface GameState {
   spUsed: Record<number, number>
   dSucc: number
   dFail: number
+  deathSaves?: {
+    successes: number // 0-3
+    failures: number // 0-3
+  }
+  isDying?: boolean
+  isGameOver?: boolean
   history: { role: 'user' | 'assistant'; content: string }[]
   pendRoll: PendingRoll | null
   inCombat: boolean

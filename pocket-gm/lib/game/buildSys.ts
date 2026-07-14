@@ -25,6 +25,7 @@ const HEADERS: Record<Lang, Record<string, string>> = {
     sheet: 'CHARACTER SHEET', name: 'Name', pronouns: 'Pronouns', species: 'Species', class: 'Class', level: 'Level', background: 'Background',
     abilityScores: 'ABILITY SCORES', combatStats: 'COMBAT STATS', hp: 'HP', max: 'max', ac: 'AC', speed: 'Speed', ft: 'ft',
     pb: 'Proficiency Bonus', init: 'Initiative',
+    acNote: 'includes all worn armor, shield, and class bonuses. Use this value exactly. Do not recalculate.',
     savingThrows: 'SAVING THROWS', skillProfs: 'SKILL PROFICIENCIES', profs: 'PROFICIENCIES',
     armor: 'Armor', weapons: 'Weapons', tools: 'Tools', equipment: 'EQUIPMENT',
     features: 'CLASS & SPECIES FEATURES', spells: 'SPELLS', cantrips: 'Cantrips', spellsKnown: 'Spells Known', spellSlots: 'Spell Slots',
@@ -36,6 +37,7 @@ const HEADERS: Record<Lang, Record<string, string>> = {
     sheet: 'FICHE DE PERSONNAGE', name: 'Nom', pronouns: 'Pronoms', species: 'Espèce', class: 'Classe', level: 'Niveau', background: 'Historique',
     abilityScores: 'CARACTÉRISTIQUES', combatStats: 'STATS DE COMBAT', hp: 'PV', max: 'max', ac: 'CA', speed: 'Vitesse', ft: 'pieds',
     pb: 'Bonus de maîtrise', init: 'Initiative',
+    acNote: 'inclut toute l\'armure portée, le bouclier et les bonus de classe. Utilise cette valeur telle quelle. Ne la recalcule pas.',
     savingThrows: 'JETS DE SAUVEGARDE', skillProfs: 'MAÎTRISES DE COMPÉTENCES', profs: 'MAÎTRISES',
     armor: 'Armures', weapons: 'Armes', tools: 'Outils', equipment: 'ÉQUIPEMENT',
     features: 'CAPACITÉS DE CLASSE ET D\'ESPÈCE', spells: 'SORTS', cantrips: 'Sorts mineurs', spellsKnown: 'Sorts connus', spellSlots: 'Emplacements de sorts',
@@ -85,6 +87,7 @@ function formatCharacterSheet(character: Character, lang: Lang): string {
   lines.push('')
   lines.push(h.combatStats)
   lines.push(`${h.hp}: ${character.hp_max} (${h.max}) | ${h.ac}: ${character.ac} | ${h.speed}: ${character.speed} ${h.ft}`)
+  lines.push(`${h.ac}: ${character.ac} — ${h.acNote}`)
   lines.push(`${h.pb}: +${pb} | ${h.init}: ${fmtMod(mods.dex)}`)
   lines.push('')
   lines.push(h.savingThrows)

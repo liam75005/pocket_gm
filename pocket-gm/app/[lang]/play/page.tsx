@@ -46,6 +46,7 @@ interface G {
   battleMap: BattleMap | null
   awaitingReaction: boolean
   gameEnded: boolean
+  causeOfDeath: string
   tokens: TokenUsage
 }
 
@@ -63,13 +64,13 @@ const defaultG = (): G => ({
   history: [], spUsed: {}, dSucc: 0, dFail: 0,
   pendRoll: null, rollsDone: [], rollCnt: 0,
   inCombat: false, combatRound: 1, initiative: [], currentTurn: 0,
-  battleMap: null, awaitingReaction: false, gameEnded: false,
+  battleMap: null, awaitingReaction: false, gameEnded: false, causeOfDeath: '',
   tokens: { input: 0, output: 0, cacheCreate: 0, cacheRead: 0, calls: 0 },
 })
 
 // ─── Save/Load API helpers ───────────────────────────────────────────────────
 
-interface SlotData { cid: string; charName?: string; s: Omit<G, 'char' | 'pendRoll' | 'rollsDone' | 'rollCnt' | 'awaitingReaction' | 'gameEnded' | 'tokens'>; log: LogMsg[]; at: string; t: number }
+interface SlotData { cid: string; charName?: string; s: Omit<G, 'char' | 'pendRoll' | 'rollsDone' | 'rollCnt' | 'awaitingReaction' | 'gameEnded' | 'causeOfDeath' | 'tokens'>; log: LogMsg[]; at: string; t: number }
 
 async function apiSave(slot: number, cid: string, g: G, log: LogMsg[]) {
   const body: SlotData = { cid, s: { hp: g.hp, hpMax: g.hpMax, inv: g.inv, conds: g.conds, notes: g.notes, gold: g.gold, history: g.history, spUsed: g.spUsed, dSucc: g.dSucc, dFail: g.dFail, inCombat: g.inCombat, combatRound: g.combatRound, initiative: g.initiative, currentTurn: g.currentTurn, battleMap: g.battleMap }, log, at: new Date().toLocaleString(), t: g.history.filter(m => m.role === 'user').length }
@@ -356,7 +357,23 @@ function PlayPageInner() {
         if (gRef.current.inCombat) setTimeout(nextTurn, 50)
         return
       }
-      if (updatedFail >= 3) { gameOver(); return }
+      if (updatedFail >= 3) {
+        const companions = cur.initiative.filter(t => t.isAlly)
+        const anyCompanionUp = companions.some(t => t.alive && !t.downed && !t.dead)
+        if (anyCompanionUp) {
+          updateG(prev => ({
+            ...prev,
+            dSucc: 0, dFail: 0, pendRoll: null, rollsDone: [],
+            conds: [...prev.conds.filter(x => x !== 'down'), 'dead'],
+            initiative: prev.initiative.map(t => t.ref === 'player' ? { ...t, alive: false, dead: true } : t),
+          }))
+          addMsg('cbt', fmt(dp.combatMsgs.playerDiedCompanionContinues, { name: cur.char?.name || '', ally: companions.map(c => c.name).join(', ') }))
+          if (gRef.current.inCombat) setTimeout(nextTurn, 50)
+        } else {
+          gameOver(dp.combatMsgs.causeThreeFailures)
+        }
+        return
+      }
       updateG(prev => ({ ...prev, dSucc: updatedSucc, dFail: updatedFail, pendRoll: null, rollsDone: [] }))
       if (gRef.current.inCombat) {
         addMsg('sys', dp.combatMsgs.stayAt0)
@@ -717,8 +734,8 @@ function PlayPageInner() {
 
   // ── Game over ─────────────────────────────────────────────────────────────
 
-  function gameOver() {
-    updateG(prev => ({ ...prev, gameEnded: true }))
+  function gameOver(cause?: string) {
+    updateG(prev => ({ ...prev, gameEnded: true, causeOfDeath: cause || dp.gameOverScreen.causeGeneric }))
     addMsg('cbt', dp.combatMsgs.death)
     addMsg('sys', dp.combatMsgs.gameOver)
   }
@@ -798,6 +815,26 @@ function PlayPageInner() {
             style={{ fontFamily: "'Cinzel', serif", fontSize: '11px', letterSpacing: '2px', textTransform: 'uppercase', padding: '14px', background: '#2a6b3a', border: '2px solid #3d9954', color: '#fff', cursor: 'pointer', width: '100%', fontWeight: 600 }}
           >
             {dp.select.newGameButton}
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Render: game over overlay ─────────────────────────────────────────────
+
+  if (g.gameEnded) {
+    return (
+      <div style={{ ...S.app, alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '24px' }}>
+        <div style={{ fontFamily: "'Cinzel', serif", fontSize: '9px', letterSpacing: '3px', color: '#c8392b', textTransform: 'uppercase', marginBottom: '18px' }}>{dp.gameOverScreen.title}</div>
+        <div style={{ fontFamily: "'Cinzel Decorative', cursive", fontSize: '22px', color: '#c9952a', marginBottom: '10px' }}>{g.char?.name}</div>
+        <div style={{ fontSize: '13px', color: '#b8a878', maxWidth: '360px', marginBottom: '28px', lineHeight: 1.6, fontStyle: 'italic' }}>{g.causeOfDeath || dp.gameOverScreen.causeGeneric}</div>
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
+          <button onClick={() => loadGame(0)} style={{ fontFamily: "'Cinzel', serif", fontSize: '10px', letterSpacing: '1px', textTransform: 'uppercase', padding: '11px 16px', background: '#2a6b3a', border: '2px solid #3d9954', color: '#fff', cursor: 'pointer', fontWeight: 600 }}>
+            {dp.gameOverScreen.loadLastSave}
+          </button>
+          <button onClick={() => router.push(`/${lang}`)} style={{ fontFamily: "'Cinzel', serif", fontSize: '10px', letterSpacing: '1px', textTransform: 'uppercase', padding: '11px 16px', background: 'transparent', border: '2px solid #3a3020', color: '#b8a878', cursor: 'pointer', fontWeight: 600 }}>
+            {dp.gameOverScreen.mainMenu}
           </button>
         </div>
       </div>

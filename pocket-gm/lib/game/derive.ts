@@ -29,10 +29,11 @@ const ARMOR_TABLE: ArmorEntry[] = [
 ]
 
 // Barbarian/Monk unarmored defense is only used when no armor item is equipped.
-export function computeAC(classId: string, equipmentNames: string[], dexMod: number, conMod: number, wisMod: number): number {
+export function computeAC(classId: string, equipmentNames: string[], dexMod: number, conMod: number, wisMod: number, subclassId?: string | null): number {
   const lower = equipmentNames.map(n => n.toLowerCase())
   const hasShield = lower.some(n => n.includes('shield'))
   const armor = ARMOR_TABLE.find(a => lower.some(n => n.includes(a.match)))
+  const defenseBonus = armor && classId === 'fighter' && subclassId === 'defense' ? 1 : 0
 
   if (!armor) {
     if (classId === 'barbarian') return 10 + dexMod + conMod + (hasShield ? 2 : 0)
@@ -41,7 +42,7 @@ export function computeAC(classId: string, equipmentNames: string[], dexMod: num
   }
 
   const dexBonus = armor.dexCap === 0 ? 0 : armor.dexCap === null ? dexMod : Math.min(dexMod, armor.dexCap)
-  return armor.base + dexBonus + (hasShield ? 2 : 0)
+  return armor.base + dexBonus + (hasShield ? 2 : 0) + defenseBonus
 }
 
 export function computeHp(hitDie: number, conMod: number): number {
