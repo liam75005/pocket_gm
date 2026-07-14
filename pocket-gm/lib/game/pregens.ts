@@ -15,6 +15,7 @@ interface PregenSpec {
   subclassId: string | null
   backgroundId: string
   abilityScores: Record<AbilityId, number>
+  equipmentOverride?: Record<Lang, string[]> // overrides the class's default equipment_options[0] kit
 }
 
 const SPECS: PregenSpec[] = [
@@ -22,17 +23,17 @@ const SPECS: PregenSpec[] = [
     pregen_id: 'the_warrior',
     name: { en: 'The Warrior', fr: 'Le Guerrier' },
     speciesId: 'human', subraceId: null,
-    classId: 'fighter', subclassId: 'dueling',
+    classId: 'fighter', subclassId: 'defense',
     backgroundId: 'soldier',
     abilityScores: { str: 15, dex: 13, con: 14, int: 10, wis: 12, cha: 8 },
   },
   {
     pregen_id: 'the_arcanist',
     name: { en: 'The Arcanist', fr: 'L\'Arcaniste' },
-    speciesId: 'elf', subraceId: 'high_elf',
-    classId: 'wizard', subclassId: null,
-    backgroundId: 'sage',
-    abilityScores: { str: 8, dex: 14, con: 13, int: 15, wis: 12, cha: 10 },
+    speciesId: 'tiefling', subraceId: null,
+    classId: 'warlock', subclassId: 'fiend',
+    backgroundId: 'charlatan',
+    abilityScores: { str: 8, dex: 13, con: 14, int: 10, wis: 12, cha: 15 },
   },
   {
     pregen_id: 'the_protector',
@@ -40,7 +41,11 @@ const SPECS: PregenSpec[] = [
     speciesId: 'dwarf', subraceId: 'hill_dwarf',
     classId: 'cleric', subclassId: null,
     backgroundId: 'acolyte',
-    abilityScores: { str: 13, dex: 12, con: 14, int: 8, wis: 15, cha: 10 },
+    abilityScores: { str: 13, dex: 12, con: 16, int: 8, wis: 15, cha: 10 },
+    equipmentOverride: {
+      en: ['Chain mail', 'Shield', 'Mace', 'Holy symbol', 'Priest\'s pack', '10 gp'],
+      fr: ['Cotte de mailles', 'Bouclier', 'Masse d\'armes', 'Symbole sacré', 'Sac de prêtre', '10 po'],
+    },
   },
   {
     pregen_id: 'the_hunter',
@@ -83,6 +88,7 @@ export function getPregens(lang: Lang): PregenCharacter[] {
       chosenSkills,
       cantrips,
       spellsKnown,
+      equipmentOverride: spec.equipmentOverride?.[lang],
     })
     return { ...character, is_pregenerated: true, pregen_id: spec.pregen_id }
   })

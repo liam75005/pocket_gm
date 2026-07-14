@@ -10,29 +10,31 @@ export function formatMod(mod: number): string {
   return mod >= 0 ? `+${mod}` : `${mod}`
 }
 
-interface ArmorEntry { match: string; base: number; dexCap: number | null }
+interface ArmorEntry { match: string[]; base: number; dexCap: number | null }
 
 // Ordered most-specific match first (e.g. "studded leather armor" before "leather armor").
+// Equipment names come from srd-data and are locale-specific (en/fr), so each tier lists
+// the substrings for every supported language.
 const ARMOR_TABLE: ArmorEntry[] = [
-  { match: 'studded leather armor', base: 12, dexCap: null },
-  { match: 'padded armor', base: 11, dexCap: null },
-  { match: 'leather armor', base: 11, dexCap: null },
-  { match: 'hide armor', base: 12, dexCap: 2 },
-  { match: 'chain shirt', base: 13, dexCap: 2 },
-  { match: 'scale mail', base: 14, dexCap: 2 },
-  { match: 'breastplate', base: 14, dexCap: 2 },
-  { match: 'half plate armor', base: 15, dexCap: 2 },
-  { match: 'ring mail', base: 14, dexCap: 0 },
-  { match: 'chain mail', base: 16, dexCap: 0 },
-  { match: 'splint armor', base: 17, dexCap: 0 },
-  { match: 'plate armor', base: 18, dexCap: 0 },
+  { match: ['studded leather armor'], base: 12, dexCap: null },
+  { match: ['padded armor'], base: 11, dexCap: null },
+  { match: ['leather armor', 'armure de cuir'], base: 11, dexCap: null },
+  { match: ['hide armor', 'armure de peaux'], base: 12, dexCap: 2 },
+  { match: ['chain shirt', 'chemise de mailles'], base: 13, dexCap: 2 },
+  { match: ['scale mail', 'armure d\'écailles'], base: 14, dexCap: 2 },
+  { match: ['breastplate'], base: 14, dexCap: 2 },
+  { match: ['half plate armor'], base: 15, dexCap: 2 },
+  { match: ['ring mail'], base: 14, dexCap: 0 },
+  { match: ['chain mail', 'cotte de mailles'], base: 16, dexCap: 0 },
+  { match: ['splint armor'], base: 17, dexCap: 0 },
+  { match: ['plate armor'], base: 18, dexCap: 0 },
 ]
 
 // Barbarian/Monk unarmored defense is only used when no armor item is equipped.
 export function computeAC(classId: string, equipmentNames: string[], dexMod: number, conMod: number, wisMod: number, subclassId?: string | null): number {
   const lower = equipmentNames.map(n => n.toLowerCase())
-  const hasShield = lower.some(n => n.includes('shield'))
-  const armor = ARMOR_TABLE.find(a => lower.some(n => n.includes(a.match)))
+  const hasShield = lower.some(n => n.includes('shield') || n.includes('bouclier'))
+  const armor = ARMOR_TABLE.find(a => lower.some(n => a.match.some(m => n.includes(m))))
   const defenseBonus = armor && classId === 'fighter' && subclassId === 'defense' ? 1 : 0
 
   if (!armor) {

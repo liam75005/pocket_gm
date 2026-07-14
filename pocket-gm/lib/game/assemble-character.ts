@@ -20,6 +20,7 @@ export interface AssembleInput {
   cantrips: string[]
   spellsKnown: string[]
   campaign?: string
+  equipmentOverride?: string[] // replaces cls.equipment_options[0] (e.g. a pregen kit that isn't one of the class's standard choices)
 }
 
 function finalizeSkills(cls: ClassData, speciesId: string, bg: BackgroundData, chosenSkills: string[], lang: Lang): string[] {
@@ -54,7 +55,7 @@ export function assembleCharacter(input: AssembleInput): Omit<Character, 'id' | 
   const dexMod = abilityMod(finalScores.dex)
   const wisMod = abilityMod(finalScores.wis)
 
-  const kitRaw = cls.equipment_options[0]
+  const kitRaw = input.equipmentOverride ?? cls.equipment_options[0]
   const equipment: EquipmentItem[] = [...parseEquipmentList(kitRaw), ...parseEquipmentList(bg.equipment)]
   const equipmentNames = [...kitRaw, ...bg.equipment]
 
