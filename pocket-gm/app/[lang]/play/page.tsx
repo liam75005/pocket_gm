@@ -9,8 +9,9 @@ import { CAMPAIGNS } from '@/lib/game/campaigns'
 import { useLang } from '@/lib/i18n/use-lang'
 import { getDictionary, fmt, type Dictionary } from '@/lib/i18n/get-dictionary'
 import type { Lang } from '@/lib/i18n/config'
-import type { PendingRoll, InitiativeEntry, TokenUsage, Character, DynamicStateForAPI } from '@/lib/types'
+import type { PendingRoll, InitiativeEntry, TokenUsage, Character, DynamicStateForAPI, BattleMap, MapToken } from '@/lib/types'
 import type { SpeciesData, ClassData, BackgroundData } from '@/lib/game/srd-types'
+import { BattleMapCanvas } from '@/components/BattleMapCanvas'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -42,8 +43,7 @@ interface G {
   combatRound: number
   initiative: InitiativeEntry[]
   currentTurn: number
-  battleMap: string | null
-  battleMapLegend: string
+  battleMap: BattleMap | null
   awaitingReaction: boolean
   gameEnded: boolean
   tokens: TokenUsage
@@ -63,7 +63,7 @@ const defaultG = (): G => ({
   history: [], spUsed: {}, dSucc: 0, dFail: 0,
   pendRoll: null, rollsDone: [], rollCnt: 0,
   inCombat: false, combatRound: 1, initiative: [], currentTurn: 0,
-  battleMap: null, battleMapLegend: '', awaitingReaction: false, gameEnded: false,
+  battleMap: null, awaitingReaction: false, gameEnded: false,
   tokens: { input: 0, output: 0, cacheCreate: 0, cacheRead: 0, calls: 0 },
 })
 
@@ -72,7 +72,7 @@ const defaultG = (): G => ({
 interface SlotData { cid: string; charName?: string; s: Omit<G, 'char' | 'pendRoll' | 'rollsDone' | 'rollCnt' | 'awaitingReaction' | 'gameEnded' | 'tokens'>; log: LogMsg[]; at: string; t: number }
 
 async function apiSave(slot: number, cid: string, g: G, log: LogMsg[]) {
-  const body: SlotData = { cid, s: { hp: g.hp, hpMax: g.hpMax, inv: g.inv, conds: g.conds, notes: g.notes, gold: g.gold, history: g.history, spUsed: g.spUsed, dSucc: g.dSucc, dFail: g.dFail, inCombat: g.inCombat, combatRound: g.combatRound, initiative: g.initiative, currentTurn: g.currentTurn, battleMap: g.battleMap, battleMapLegend: g.battleMapLegend }, log, at: new Date().toLocaleString(), t: g.history.filter(m => m.role === 'user').length }
+  const body: SlotData = { cid, s: { hp: g.hp, hpMax: g.hpMax, inv: g.inv, conds: g.conds, notes: g.notes, gold: g.gold, history: g.history, spUsed: g.spUsed, dSucc: g.dSucc, dFail: g.dFail, inCombat: g.inCombat, combatRound: g.combatRound, initiative: g.initiative, currentTurn: g.currentTurn, battleMap: g.battleMap }, log, at: new Date().toLocaleString(), t: g.history.filter(m => m.role === 'user').length }
   await fetch('/api/saves', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ slot, characterId: cid, state: body, logHtml: null, turnCount: body.t }) })
 }
 
@@ -135,7 +135,7 @@ function PlayPageInner() {
   const [allSaves, setAllSaves] = useState<{ slot: number; data: SlotData }[]>([])
   const [toast, setToast] = useState<{ msg: string; err?: boolean } | null>(null)
   const [cbCollapsed, setCbCollapsed] = useState(false)
-  const [bmCollapsed, setBmCollapsed] = useState(false)
+  const [mapVisible, setMapVisible] = useState(true)
   const [showManualNext, setShowManualNext] = useState<InitiativeEntry | null>(null)
   const [inlineError, setInlineError] = useState<string | null>(null)
 
@@ -183,7 +183,7 @@ function PlayPageInner() {
 
   // ── Combat ────────────────────────────────────────────────────────────────
 
-  function startCombat(enemies: { name: string; dexMod?: number; init?: number; ref?: string; isAlly?: boolean }[], battleMap: { grid: string; legend: string } | null, opts: { playerSurprised?: boolean; surprisedRefs?: string[] }) {
+  function startCombat(enemies: { name: string; dexMod?: number; init?: number; ref?: string; isAlly?: boolean }[], battleMap: BattleMap | null, opts: { playerSurprised?: boolean; surprisedRefs?: string[] }) {
     const playerSurprised = !!opts.playerSurprised
     const surprisedRefs = opts.surprisedRefs || []
 
@@ -235,8 +235,7 @@ function PlayPageInner() {
       return {
         ...prev,
         inCombat: true, combatRound: 1, initiative, currentTurn: 0,
-        battleMap: battleMap?.grid || null,
-        battleMapLegend: battleMap?.legend || 'P/E/#/.',
+        battleMap: battleMap || null,
       }
     })
   }
@@ -259,8 +258,8 @@ function PlayPageInner() {
   function revive(name: string) {
     updateG(prev => ({ ...prev, initiative: prev.initiative.map(t => t.name === name ? { ...t, downed: false, stabilized: false, alive: true } : t) }))
   }
-  function updateBattleMap(grid: string, legend: string) {
-    updateG(prev => ({ ...prev, battleMap: grid, battleMapLegend: legend }))
+  function updateBattleMap(battleMap: BattleMap | null) {
+    updateG(prev => ({ ...prev, battleMap }))
   }
 
   function nextTurn() {
@@ -462,16 +461,19 @@ function PlayPageInner() {
         clean = clean.replace(cb, '')
         const cdata = parsed.COMBAT as {
           start?: boolean; enemies?: { name: string; dexMod?: number; ref?: string; isAlly?: boolean }[]
-          battleMap?: { grid: string; legend: string }; playerSurprised?: boolean; surprisedRefs?: string[]
+          battle_map?: BattleMap | null; playerSurprised?: boolean; surprisedRefs?: string[]
           kill?: string; downed?: string; stabilized?: string; revive?: string
-          mapUpdate?: string; legend?: string; end?: boolean
+          end?: boolean
         }
-        if (cdata.start) startCombat(cdata.enemies || [], cdata.battleMap || null, { playerSurprised: cdata.playerSurprised, surprisedRefs: cdata.surprisedRefs })
+        if (cdata.start) {
+          startCombat(cdata.enemies || [], cdata.battle_map || null, { playerSurprised: cdata.playerSurprised, surprisedRefs: cdata.surprisedRefs })
+        } else if (cdata.battle_map !== undefined) {
+          updateBattleMap(cdata.battle_map)
+        }
         if (cdata.kill) { killEnemy(cdata.kill); addMsg('cbt', fmt(dp.combatMsgs.enemyDied, { name: cdata.kill })) }
         if (cdata.downed) { markDowned(cdata.downed); addMsg('cbt', fmt(dp.combatMsgs.allyDowned, { name: cdata.downed })) }
         if (cdata.stabilized) { markStabilized(cdata.stabilized); addMsg('cbt', fmt(dp.combatMsgs.allyStabilized, { name: cdata.stabilized })) }
         if (cdata.revive) { revive(cdata.revive); addMsg('cbt', fmt(dp.combatMsgs.allyRevived, { name: cdata.revive })) }
-        if (cdata.mapUpdate) updateBattleMap(cdata.mapUpdate, cdata.legend || '')
         if (cdata.end) endCombat()
       })
 
@@ -629,10 +631,6 @@ function PlayPageInner() {
   function sendMsg() {
     const cur = gRef.current
     if (cur.pendRoll) { addMsg('sys', dp.combatMsgs.rollFirst); return }
-    if (cur.inCombat && cur.initiative.length && !cur.awaitingReaction) {
-      const curr = cur.initiative[cur.currentTurn]
-      if (curr && !curr.isPlayer) { addMsg('sys', fmt(dp.combatMsgs.notYourTurn, { name: curr.name })); return }
-    }
     const text = inputText.trim()
     if (!text) return
     setInputText('')
@@ -646,6 +644,19 @@ function PlayPageInner() {
     addMsg('pl', text)
     autoSave()
     callDM(text, false)
+  }
+
+  // ── Battle map interaction ───────────────────────────────────────────────
+
+  function handleMapMove(x: number, y: number) {
+    const cols = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+    const posLabel = `${cols[x] ?? x}${y + 1}`
+    setInputText(fmt(dp.battleMap.moveTo, { pos: posLabel }))
+    setTimeout(sendMsg, 0)
+  }
+
+  function handleTargetEnemy(token: MapToken) {
+    setInputText(fmt(dp.battleMap.attackTarget, { label: token.label }))
   }
 
   // ── Save / Load ───────────────────────────────────────────────────────────
@@ -687,7 +698,6 @@ function PlayPageInner() {
       restored.initiative = d.s.initiative || []
       restored.currentTurn = d.s.currentTurn || 0
       restored.battleMap = d.s.battleMap || null
-      restored.battleMapLegend = d.s.battleMapLegend || ''
       setG(restored); gRef.current = restored
       setLog(d.log || [])
       setPhase('play')
@@ -735,10 +745,6 @@ function PlayPageInner() {
     if (loading) return true
     if (cur.pendRoll) return true
     if (cur.gameEnded) return true
-    if (cur.inCombat && cur.initiative.length && !cur.awaitingReaction) {
-      const curr = cur.initiative[cur.currentTurn]
-      if (curr && !curr.isPlayer) return true
-    }
     return false
   }
 
@@ -852,14 +858,24 @@ function PlayPageInner() {
 
       {g.inCombat && g.battleMap && (
         <div style={{ background: '#0f0d09', borderBottom: '1px solid #3a3020', flexShrink: 0 }}>
-          <div onClick={() => setBmCollapsed(p => !p)} style={{ padding: '4px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}>
-            <span style={{ fontFamily: "'Cinzel', serif", fontSize: '8px', letterSpacing: '2px', color: '#7a6840', textTransform: 'uppercase' }}>{dp.battleMap.title}</span>
-            <span style={{ fontFamily: "'Cinzel', serif", fontSize: '8px', color: '#3a3020' }}>{bmCollapsed ? '▶' : '▼'}</span>
+          <div style={{ padding: '4px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', overflow: 'hidden' }}>
+              <span style={{ fontFamily: "'Cinzel', serif", fontSize: '8px', letterSpacing: '2px', color: '#7a6840', textTransform: 'uppercase', flexShrink: 0 }}>{dp.battleMap.title}</span>
+              {mapVisible && <TurnOrderTracker tokens={g.battleMap.tokens} />}
+            </div>
+            <button onClick={() => setMapVisible(v => !v)} style={{ fontFamily: "'Cinzel', serif", fontSize: '8px', letterSpacing: '1px', color: '#c9952a', background: 'transparent', border: 'none', cursor: 'pointer', flexShrink: 0, textDecoration: 'underline' }}>
+              {mapVisible ? dp.battleMap.hide : dp.battleMap.show}
+            </button>
           </div>
-          {!bmCollapsed && (
-            <div style={{ padding: '4px 12px 8px' }}>
-              <pre style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '11px', color: '#e8d090', background: '#0f0d09', lineHeight: 1.25, whiteSpace: 'pre', overflowX: 'auto', letterSpacing: '1px' }}>{g.battleMap}</pre>
-              {g.battleMapLegend && <div style={{ fontFamily: "'Cinzel', serif", fontSize: '9px', color: '#7a6840', marginTop: '4px' }}>{g.battleMapLegend}</div>}
+          {mapVisible && (
+            <div style={{ padding: '4px 12px 8px', overflow: 'auto', maxHeight: '42vh' }}>
+              <BattleMapCanvas
+                battleMap={g.battleMap}
+                playerSpeed={g.char?.speed ?? 30}
+                isPlayerTurn={g.inCombat && g.initiative[g.currentTurn]?.isPlayer === true}
+                onMove={handleMapMove}
+                onTargetEnemy={handleTargetEnemy}
+              />
             </div>
           )}
         </div>
@@ -945,7 +961,7 @@ function PlayPageInner() {
             value={inputText}
             onChange={e => setInputText(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg() } }}
-            placeholder={inputLocked && !pendRoll ? (g.inCombat ? dp.input.waitingTurn : dp.input.loading) : dp.input.placeholder}
+            placeholder={loading ? dp.input.loading : dp.input.placeholder}
             disabled={inputLocked}
             rows={2}
             style={{ flex: 1, fontFamily: "'Crimson Pro', serif", fontSize: '14px', padding: '9px 10px', background: inputLocked ? '#16130d' : '#241f17', border: '1px solid #3a3020', color: '#f0ead8', outline: 'none', resize: 'none', WebkitAppearance: 'none', opacity: inputLocked ? 0.5 : 1 }}
@@ -988,8 +1004,15 @@ function PlayPageInner() {
               {g.battleMap && (
                 <>
                   <div style={{ fontFamily: "'Cinzel', serif", fontSize: '8px', letterSpacing: '2px', color: '#ff9050', textTransform: 'uppercase', marginBottom: '6px', borderBottom: '1px solid #3a3020', paddingBottom: '3px' }}>{dp.battleMap.title}</div>
-                  <pre style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '11px', color: '#e8d090', background: '#0f0d09', padding: '8px', border: '1px solid #3a3020', lineHeight: 1.25, whiteSpace: 'pre', overflowX: 'auto', letterSpacing: '1px', marginBottom: '5px' }}>{g.battleMap}</pre>
-                  <div style={{ fontFamily: "'Cinzel', serif", fontSize: '9px', color: '#7a6840' }}>{g.battleMapLegend}</div>
+                  <div style={{ overflow: 'auto' }}>
+                    <BattleMapCanvas
+                      battleMap={g.battleMap}
+                      playerSpeed={g.char?.speed ?? 30}
+                      isPlayerTurn={g.inCombat && g.initiative[g.currentTurn]?.isPlayer === true}
+                      onMove={handleMapMove}
+                      onTargetEnemy={handleTargetEnemy}
+                    />
+                  </div>
                 </>
               )}
             </div>
@@ -1028,6 +1051,28 @@ function PlayPageInner() {
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes pulse { 0%, 60%, 100% { opacity: 0.2; } 30% { opacity: 1; } }
       `}</style>
+    </div>
+  )
+}
+
+// ─── Turn order tracker (from battle map tokens) ─────────────────────────
+
+function TurnOrderTracker({ tokens }: { tokens: MapToken[] }) {
+  return (
+    <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexWrap: 'wrap' }}>
+      {tokens.filter(t => t.condition !== 'defeated').map(t => (
+        <div
+          key={t.id}
+          style={{
+            fontFamily: "'Cinzel', serif", fontSize: '9px', fontWeight: 700, padding: '3px 7px', borderRadius: '2px',
+            background: t.is_active ? '#c9952a' : '#241f17',
+            color: t.is_active ? '#1a1610' : '#b8a878',
+            border: `1px solid ${t.is_active ? '#c9952a' : '#3a3020'}`,
+          }}
+        >
+          {t.label}
+        </div>
+      ))}
     </div>
   )
 }

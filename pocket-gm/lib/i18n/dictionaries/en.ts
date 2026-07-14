@@ -84,7 +84,10 @@ export const en = {
     },
     rollBanner: { required: '⚠ Roll Required', advantage: 'Advantage', disadvantage: 'Disadvantage', normal: 'Normal', dc: 'DC{dc}' },
     combat: { label: '⚔ COMBAT', round: 'Round {n}' },
-    battleMap: { title: 'Tactical Map' },
+    battleMap: {
+      title: 'Tactical Map', show: 'Show map', hide: 'Hide map',
+      moveTo: 'I move to {pos}.', attackTarget: 'I attack the {label}.',
+    },
     log: { title: 'Chronicle', thinking: 'The GM is thinking', dmLabel: 'Game Master' },
     sheetButton: '📋 Sheet · Inventory · Spells · Features',
     playTurnButton: '▶ Play {name}\'s turn',

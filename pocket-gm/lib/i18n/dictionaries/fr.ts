@@ -84,7 +84,10 @@ export const fr = {
     },
     rollBanner: { required: '⚠ Jet requis', advantage: 'Avantage', disadvantage: 'Désavantage', normal: 'Normal', dc: 'DD{dc}' },
     combat: { label: '⚔ COMBAT', round: 'Round {n}' },
-    battleMap: { title: 'Carte tactique' },
+    battleMap: {
+      title: 'Carte tactique', show: 'Afficher la carte', hide: 'Masquer la carte',
+      moveTo: 'Je me déplace en {pos}.', attackTarget: 'J\'attaque le {label}.',
+    },
     log: { title: 'Chronique', thinking: 'Le MJ réfléchit', dmLabel: 'Maître du Jeu' },
     sheetButton: '📋 Fiche · Inventaire · Sorts · Capacités',
     playTurnButton: '▶ Jouer le tour de {name}',

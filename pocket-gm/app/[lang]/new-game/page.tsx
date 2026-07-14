@@ -802,8 +802,27 @@ export default function NewGamePage() {
 
   const isReview = step === 'review'
 
+  // The global stylesheet sets html/body to overflow: hidden for the app-shell
+  // screens (e.g. /play). This wizard is a normal scrolling page, so it opts
+  // out for as long as it's mounted and restores the previous values on exit.
+  useEffect(() => {
+    const html = document.documentElement
+    const body = document.body
+    const prev = { htmlOverflow: html.style.overflow, bodyOverflow: body.style.overflow, htmlHeight: html.style.height, bodyHeight: body.style.height }
+    html.style.overflow = 'auto'
+    body.style.overflow = 'auto'
+    html.style.height = 'auto'
+    body.style.height = 'auto'
+    return () => {
+      html.style.overflow = prev.htmlOverflow
+      body.style.overflow = prev.bodyOverflow
+      html.style.height = prev.htmlHeight
+      body.style.height = prev.bodyHeight
+    }
+  }, [])
+
   return (
-    <div style={{ height: '100vh', overflowY: 'auto', WebkitOverflowScrolling: 'touch', touchAction: 'pan-y', background: C.bg, color: C.ink, fontFamily: "'Crimson Pro', serif" }}>
+    <div style={{ minHeight: '100vh', background: C.bg, color: C.ink, fontFamily: "'Crimson Pro', serif" }}>
       <div style={{ background: C.cd, borderBottom: `2px solid ${C.go}`, padding: '12px 16px' }}>
         <div style={{ fontFamily: "'Cinzel Decorative', cursive", fontSize: '15px', color: C.go }}>{d.title}</div>
         <div style={{ display: 'flex', gap: '4px', marginTop: '8px', overflowX: 'auto' }}>

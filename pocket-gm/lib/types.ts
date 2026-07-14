@@ -29,6 +29,29 @@ export interface TokenUsage {
   calls: number
 }
 
+export interface MapToken {
+  id: string
+  x: number
+  y: number
+  label: string           // 2-3 char abbreviation, e.g. "You", "Gob", "Etc"
+  type: 'player' | 'enemy' | 'ally' | 'neutral'
+  // Player/ally tokens: send HP values
+  hp?: number
+  hp_max?: number
+  // Enemy tokens: send condition label only (never exact HP)
+  condition?: 'healthy' | 'bloodied' | 'hurt' | 'critical' | 'defeated'
+  status_effects?: string[]   // e.g. ['prone', 'restrained']
+  is_active: boolean          // true = this token's turn
+}
+
+export interface BattleMap {
+  grid: string    // compact row strings joined by \n
+  width: number
+  height: number
+  tokens: MapToken[]
+  cell_size_ft: number  // almost always 5
+}
+
 export interface GameState {
   hp: number
   hpMax: number
@@ -45,8 +68,7 @@ export interface GameState {
   combatRound: number
   initiative: InitiativeEntry[]
   currentTurn: number
-  battleMap: string | null
-  battleMapLegend: string
+  battleMap: BattleMap | null
   awaitingReaction: boolean
   tokens: TokenUsage
 }
