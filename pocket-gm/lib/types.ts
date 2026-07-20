@@ -52,6 +52,12 @@ export interface BattleMap {
   cell_size_ft: number  // almost always 5
 }
 
+export interface RoundActions {
+  actionUsed: boolean
+  bonusActionUsed: boolean
+  movementUsed: number  // feet used this round
+}
+
 export interface GameState {
   hp: number
   hpMax: number
@@ -77,6 +83,7 @@ export interface GameState {
   battleMap: BattleMap | null
   awaitingReaction: boolean
   tokens: TokenUsage
+  roundActions?: RoundActions
 }
 
 export interface SaveSlot {
@@ -157,4 +164,5 @@ export interface DynamicStateForAPI {
   combatRound: number
   initiative: InitiativeEntry[]
   currentTurn: number
+  roundActions?: RoundActions
 }

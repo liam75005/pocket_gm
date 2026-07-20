@@ -9,7 +9,7 @@ import { CAMPAIGNS } from '@/lib/game/campaigns'
 import { useLang } from '@/lib/i18n/use-lang'
 import { getDictionary, fmt, type Dictionary } from '@/lib/i18n/get-dictionary'
 import type { Lang } from '@/lib/i18n/config'
-import type { PendingRoll, InitiativeEntry, TokenUsage, Character, DynamicStateForAPI, BattleMap, MapToken } from '@/lib/types'
+import type { PendingRoll, InitiativeEntry, TokenUsage, Character, DynamicStateForAPI, BattleMap, MapToken, RoundActions } from '@/lib/types'
 import type { SpeciesData, ClassData, BackgroundData } from '@/lib/game/srd-types'
 import { BattleMapCanvas } from '@/components/BattleMapCanvas'
 
@@ -48,7 +48,10 @@ interface G {
   gameEnded: boolean
   causeOfDeath: string
   tokens: TokenUsage
+  roundActions: RoundActions
 }
+
+const freshRoundActions = (): RoundActions => ({ actionUsed: false, bonusActionUsed: false, movementUsed: 0 })
 
 function mS(v: number) { const m = Math.floor((v - 10) / 2); return m >= 0 ? `+${m}` : `${m}` }
 function rRaw(s: number) { return Math.floor(Math.random() * s) + 1 }
@@ -66,6 +69,7 @@ const defaultG = (): G => ({
   inCombat: false, combatRound: 1, initiative: [], currentTurn: 0,
   battleMap: null, awaitingReaction: false, gameEnded: false, causeOfDeath: '',
   tokens: { input: 0, output: 0, cacheCreate: 0, cacheRead: 0, calls: 0 },
+  roundActions: freshRoundActions(),
 })
 
 // ─── Save/Load API helpers ───────────────────────────────────────────────────
@@ -73,7 +77,7 @@ const defaultG = (): G => ({
 interface SlotData { cid: string; charName?: string; s: Omit<G, 'char' | 'pendRoll' | 'rollsDone' | 'rollCnt' | 'awaitingReaction' | 'gameEnded' | 'causeOfDeath' | 'tokens'>; log: LogMsg[]; at: string; t: number }
 
 async function apiSave(slot: number, cid: string, g: G, log: LogMsg[]) {
-  const body: SlotData = { cid, s: { hp: g.hp, hpMax: g.hpMax, inv: g.inv, conds: g.conds, notes: g.notes, gold: g.gold, history: g.history, spUsed: g.spUsed, dSucc: g.dSucc, dFail: g.dFail, inCombat: g.inCombat, combatRound: g.combatRound, initiative: g.initiative, currentTurn: g.currentTurn, battleMap: g.battleMap }, log, at: new Date().toLocaleString(), t: g.history.filter(m => m.role === 'user').length }
+  const body: SlotData = { cid, s: { hp: g.hp, hpMax: g.hpMax, inv: g.inv, conds: g.conds, notes: g.notes, gold: g.gold, history: g.history, spUsed: g.spUsed, dSucc: g.dSucc, dFail: g.dFail, inCombat: g.inCombat, combatRound: g.combatRound, initiative: g.initiative, currentTurn: g.currentTurn, battleMap: g.battleMap, roundActions: g.roundActions }, log, at: new Date().toLocaleString(), t: g.history.filter(m => m.role === 'user').length }
   await fetch('/api/saves', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ slot, characterId: cid, state: body, logHtml: null, turnCount: body.t }) })
 }
 
@@ -137,6 +141,7 @@ function PlayPageInner() {
   const [toast, setToast] = useState<{ msg: string; err?: boolean } | null>(null)
   const [cbCollapsed, setCbCollapsed] = useState(false)
   const [mapVisible, setMapVisible] = useState(true)
+  const [showMenu, setShowMenu] = useState(false)
   const [showManualNext, setShowManualNext] = useState<InitiativeEntry | null>(null)
   const [inlineError, setInlineError] = useState<string | null>(null)
 
@@ -237,6 +242,7 @@ function PlayPageInner() {
         ...prev,
         inCombat: true, combatRound: 1, initiative, currentTurn: 0,
         battleMap: battleMap || null,
+        roundActions: freshRoundActions(),
       }
     })
   }
@@ -292,7 +298,7 @@ function PlayPageInner() {
           setShowManualNext(curr)
         }
       }
-      return { ...prev, currentTurn: next, combatRound }
+      return { ...prev, currentTurn: next, combatRound, roundActions: curr?.isPlayer ? freshRoundActions() : prev.roundActions }
     })
   }
 
@@ -427,6 +433,7 @@ function PlayPageInner() {
       hp: cur.hp, hpMax: cur.hpMax, spUsed: cur.spUsed, conds: cur.conds,
       inv: cur.inv, gold: cur.gold, notes: cur.notes, inCombat: cur.inCombat,
       combatRound: cur.combatRound, initiative: cur.initiative, currentTurn: cur.currentTurn,
+      roundActions: cur.roundActions,
     }
 
     try {
@@ -472,6 +479,7 @@ function PlayPageInner() {
       })
 
       const combatBlocks = extractAllBlocks(clean, 'COMBAT')
+      let receivedBattleMap = false
       combatBlocks.forEach(cb => {
         const parsed = safeParseJSON(cb)
         if (!parsed?.COMBAT) return
@@ -482,6 +490,7 @@ function PlayPageInner() {
           kill?: string; downed?: string; stabilized?: string; revive?: string
           end?: boolean
         }
+        if (cdata.battle_map !== undefined) receivedBattleMap = true
         if (cdata.start) {
           startCombat(cdata.enemies || [], cdata.battle_map || null, { playerSurprised: cdata.playerSurprised, surprisedRefs: cdata.surprisedRefs })
         } else if (cdata.battle_map !== undefined) {
@@ -493,6 +502,11 @@ function PlayPageInner() {
         if (cdata.revive) { revive(cdata.revive); addMsg('cbt', fmt(dp.combatMsgs.allyRevived, { name: cdata.revive })) }
         if (cdata.end) endCombat()
       })
+      // Protocol enforcement fallback: the LLM sometimes narrates combat without emitting an
+      // updated battle_map. Never clear the map on omission — just warn and keep the last known state.
+      if (gRef.current.inCombat && !receivedBattleMap) {
+        console.warn('[PocketGM] Combat response omitted battle_map — retaining previous map state.')
+      }
 
       const turnBlocks = extractAllBlocks(clean, 'TURN')
       turnBlocks.forEach(tb => {
@@ -522,6 +536,7 @@ function PlayPageInner() {
         const u = parsed.STATE as {
           hp?: number; addItem?: string; removeItem?: string; addCond?: string; removeCond?: string
           useSlot?: number; goldDelta?: number; gold?: number; note?: string
+          actionUsed?: boolean; bonusActionUsed?: boolean; movementDelta?: number
         }
         clean = clean.replace(s, '')
         updateG(prev => {
@@ -551,6 +566,14 @@ function PlayPageInner() {
           if (typeof u.goldDelta === 'number') {
             next.gold = Math.max(0, next.gold + u.goldDelta)
             addMsg('sys', fmt(dp.combatMsgs.goldDelta, { sign: u.goldDelta >= 0 ? '+' : '', delta: u.goldDelta, gold: next.gold }))
+          }
+          if (u.actionUsed || u.bonusActionUsed || typeof u.movementDelta === 'number') {
+            const ra = next.roundActions
+            next.roundActions = {
+              actionUsed: ra.actionUsed || !!u.actionUsed,
+              bonusActionUsed: ra.bonusActionUsed || !!u.bonusActionUsed,
+              movementUsed: ra.movementUsed + (u.movementDelta || 0),
+            }
           }
           return next
         })
@@ -715,6 +738,7 @@ function PlayPageInner() {
       restored.initiative = d.s.initiative || []
       restored.currentTurn = d.s.currentTurn || 0
       restored.battleMap = d.s.battleMap || null
+      restored.roundActions = d.s.roundActions || freshRoundActions()
       setG(restored); gRef.current = restored
       setLog(d.log || [])
       setPhase('play')
@@ -767,6 +791,8 @@ function PlayPageInner() {
 
   // ── CSS ───────────────────────────────────────────────────────────────────
 
+  const HEADER_H = 56 // px — fixed play-screen header height, kept in sync with the spacer below it
+
   const S: Record<string, React.CSSProperties> = {
     app: { display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', fontFamily: "'Crimson Pro', serif", color: '#f0ead8', background: '#0f0d09' },
     hdr: { background: '#1e1912', borderBottom: '2px solid #c9952a', padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 },
@@ -774,6 +800,7 @@ function PlayPageInner() {
     hs: { fontFamily: "'Cinzel', serif", fontSize: '7px', letterSpacing: '2px', color: '#b8a878', textTransform: 'uppercase' },
     hbdg: { fontFamily: "'Cinzel', serif", fontSize: '8px', letterSpacing: '2px', color: '#c8392b', border: '1px solid #c8392b', padding: '2px 7px', whiteSpace: 'nowrap' },
     hbtn: { fontFamily: "'Cinzel', serif", fontSize: '9px', letterSpacing: '1px', padding: '5px 9px', background: 'transparent', border: '1px solid #3a3020', color: '#b8a878', cursor: 'pointer', borderRadius: '2px' },
+    menuItem: { fontFamily: "'Cinzel', serif", fontSize: '9px', letterSpacing: '1px', padding: '10px 12px', background: 'transparent', border: 'none', borderBottom: '1px solid #3a3020', color: '#b8a878', cursor: 'pointer', textAlign: 'left', whiteSpace: 'nowrap' },
   }
 
   // ── Render: select screen ─────────────────────────────────────────────────
@@ -850,16 +877,32 @@ function PlayPageInner() {
 
   return (
     <div style={S.app}>
-      <div style={S.hdr}>
-        <div><div style={S.ht}>{campaign ? campaign.name[lang] : dict.common.appName}</div><div style={S.hs}>{dict.common.tagline}</div></div>
-        <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+      <div style={{ ...S.hdr, position: 'fixed', top: 0, left: 0, right: 0, zIndex: 175, height: `${HEADER_H}px`, boxSizing: 'border-box' }}>
+        <div style={{ minWidth: 0, overflow: 'hidden' }}>
+          <div style={{ ...S.ht, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{g.char?.name || dict.common.appName}</div>
+          <div style={{ ...S.hs, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{campaign ? campaign.name[lang] : dict.common.tagline}</div>
+        </div>
+        <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexShrink: 0 }}>
           {g.inCombat && <button onClick={() => setShowDrawer(true)} style={{ ...S.hbtn, background: 'rgba(155,35,24,.2)', borderColor: '#c8392b', color: '#ff9050', fontSize: '9px', fontWeight: 600 }}>{dp.header.combatButton}</button>}
           <span style={S.hbdg}>{fmt(dp.header.hpBadge, { hp: g.hp, hpMax: g.hpMax })}</span>
           <button onClick={() => setShowTokenDetail(true)} style={{ ...S.hbtn, fontSize: '8px' }}>{tokenLabel(tokens)}</button>
-          <button onClick={() => { apiLoadAll().then(setAllSaves); setShowSaves(true) }} style={S.hbtn}>💾</button>
-          <button onClick={abandonGame} style={{ ...S.hbtn, borderColor: '#c8392b', color: '#ff8070' }}>⏏</button>
+          <button onClick={() => { apiLoadAll().then(setAllSaves); setShowSaves(true) }} style={S.hbtn} title={dp.saves.title}>💾</button>
+          <div style={{ position: 'relative' }}>
+            <button onClick={() => setShowMenu(v => !v)} style={S.hbtn}>☰</button>
+            {showMenu && (
+              <>
+                <div onClick={() => setShowMenu(false)} style={{ position: 'fixed', inset: 0, zIndex: 399 }} />
+                <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', background: '#1e1912', border: '1px solid #3a3020', minWidth: '170px', zIndex: 400, display: 'flex', flexDirection: 'column' }}>
+                  <button onClick={() => { setShowMenu(false); apiLoadAll().then(setAllSaves); setShowSaves(true) }} style={S.menuItem}>{dp.saves.title}</button>
+                  <button onClick={() => { setShowMenu(false); router.push(`/${lang}/new-game`) }} style={S.menuItem}>{dp.select.newGameButton}</button>
+                  <button onClick={() => { setShowMenu(false); abandonGame() }} style={{ ...S.menuItem, color: '#ff8070', borderBottom: 'none' }}>{dp.gameOverScreen.mainMenu}</button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
+      <div style={{ height: `${HEADER_H}px`, flexShrink: 0 }} />
 
       {pendRoll && (
         <div style={{ background: '#7a4f0a', borderBottom: '1px solid #c8820a', padding: '6px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
@@ -1021,7 +1064,7 @@ function PlayPageInner() {
       {showDrawer && (
         <>
           <div onClick={() => setShowDrawer(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 149 }} />
-          <div style={{ position: 'fixed', top: 0, right: 0, width: '88%', maxWidth: '380px', height: '100vh', background: '#1a1610', borderLeft: '2px solid #c8392b', zIndex: 150, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ position: 'fixed', top: `${HEADER_H}px`, right: 0, width: '88%', maxWidth: '380px', height: `calc(100vh - ${HEADER_H}px)`, background: '#1a1610', borderLeft: '2px solid #c8392b', zIndex: 150, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
             <div style={{ padding: '10px 14px', background: '#1e1912', borderBottom: '2px solid #c8392b', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
               <span style={{ fontFamily: "'Cinzel Decorative', cursive", fontSize: '14px', color: '#ff9050' }}>{dp.combat.label}</span>
               <button onClick={() => setShowDrawer(false)} style={{ fontFamily: "'Cinzel', serif", fontSize: '10px', letterSpacing: '1px', padding: '5px 10px', background: 'transparent', border: '1px solid #7a6840', color: '#7a6840', cursor: 'pointer', borderRadius: '2px' }}>{dp.saves.close}</button>
