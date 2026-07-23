@@ -51,7 +51,7 @@ interface G {
   roundActions: RoundActions
 }
 
-const freshRoundActions = (): RoundActions => ({ actionUsed: false, bonusActionUsed: false, movementUsed: 0 })
+const freshRoundActions = (): RoundActions => ({ actionUsed: false, bonusActionUsed: false, movementUsed: 0, reactionUsed: false })
 
 function mS(v: number) { const m = Math.floor((v - 10) / 2); return m >= 0 ? `+${m}` : `${m}` }
 function rRaw(s: number) { return Math.floor(Math.random() * s) + 1 }
@@ -60,6 +60,15 @@ function fmtLog(t: string) {
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
     .replace(/\n/g, '<br>')
+}
+
+// Defensive display-only filter: strips any JSON/technical content that slipped through the
+// protocol parsing in callDM. Never applied to G.history — the LLM still needs the raw content.
+function stripTechnicalContent(text: string): string {
+  let cleaned = text.replace(/\{[\s\S]*?\}(?=\s*$|\s*\n)/gm, '')
+  cleaned = cleaned.replace(/^\[.*?\].*$/gm, '')
+  cleaned = cleaned.replace(/\n{3,}/g, '\n\n')
+  return cleaned.trim()
 }
 
 const defaultG = (): G => ({
@@ -229,6 +238,7 @@ function PlayPageInner() {
 
       addMsg('sys', '═══════════════════════')
       addMsg('cbt', dp.combatMsgs.engaged)
+      addMsg('sys', fmt(dp.combatMsgs.roundBegins, { round: 1 }))
       addMsg('sys', '═══════════════════════')
       const order = initiative.map(t => `${t.name}(${t.init})`).join(' → ')
       addMsg('cbt', fmt(dp.combatMsgs.order, { order }))
@@ -281,9 +291,11 @@ function PlayPageInner() {
         loops++
       }
       let combatRound = prev.combatRound
-      if (next <= prev.currentTurn) combatRound++
+      const roundChanged = next <= prev.currentTurn
+      if (roundChanged) combatRound++
       const curr = prev.initiative[next]
       if (curr) {
+        if (roundChanged) addMsg('sys', fmt(dp.combatMsgs.roundBegins, { round: combatRound }))
         if (curr.isPlayer) {
           setShowManualNext(null)
           addMsg('cbt', fmt(dp.combatMsgs.yourTurn, { round: combatRound }))
@@ -536,7 +548,7 @@ function PlayPageInner() {
         const u = parsed.STATE as {
           hp?: number; addItem?: string; removeItem?: string; addCond?: string; removeCond?: string
           useSlot?: number; goldDelta?: number; gold?: number; note?: string
-          actionUsed?: boolean; bonusActionUsed?: boolean; movementDelta?: number
+          actionUsed?: boolean; bonusActionUsed?: boolean; movementDelta?: number; reactionUsed?: boolean
         }
         clean = clean.replace(s, '')
         updateG(prev => {
@@ -567,12 +579,13 @@ function PlayPageInner() {
             next.gold = Math.max(0, next.gold + u.goldDelta)
             addMsg('sys', fmt(dp.combatMsgs.goldDelta, { sign: u.goldDelta >= 0 ? '+' : '', delta: u.goldDelta, gold: next.gold }))
           }
-          if (u.actionUsed || u.bonusActionUsed || typeof u.movementDelta === 'number') {
+          if (u.actionUsed || u.bonusActionUsed || u.reactionUsed || typeof u.movementDelta === 'number') {
             const ra = next.roundActions
             next.roundActions = {
               actionUsed: ra.actionUsed || !!u.actionUsed,
               bonusActionUsed: ra.bonusActionUsed || !!u.bonusActionUsed,
               movementUsed: ra.movementUsed + (u.movementDelta || 0),
+              reactionUsed: ra.reactionUsed || !!u.reactionUsed,
             }
           }
           return next
@@ -905,7 +918,7 @@ function PlayPageInner() {
       <div style={{ height: `${HEADER_H}px`, flexShrink: 0 }} />
 
       {pendRoll && (
-        <div style={{ background: '#7a4f0a', borderBottom: '1px solid #c8820a', padding: '6px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+        <div style={{ background: '#7a4f0a', borderBottom: '1px solid #c8820a', padding: '6px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, animation: 'diceGlow 1.1s ease-in-out infinite' }}>
           <div>
             <div style={{ fontFamily: "'Cinzel', serif", fontSize: '8px', letterSpacing: '2px', color: '#ffcc70', textTransform: 'uppercase' }}>{dp.rollBanner.required}</div>
             <div style={{ fontSize: '11px', color: '#ffe090', fontWeight: 600 }}>{pendRoll.label}{pendRoll.dc ? ` · ${fmt(dp.rollBanner.dc, { dc: pendRoll.dc })}` : ''}</div>
@@ -971,7 +984,7 @@ function PlayPageInner() {
                   {msg.type === 'dm' ? dp.log.dmLabel : g.char?.name || ''}
                 </span>
               )}
-              <span dangerouslySetInnerHTML={{ __html: msg.type === 'dm' || msg.type === 'pl' || msg.type === 'cbt' ? fmtLog(msg.text) : msg.text }} />
+              <span dangerouslySetInnerHTML={{ __html: msg.type === 'dm' ? fmtLog(stripTechnicalContent(msg.text)) : msg.type === 'pl' || msg.type === 'cbt' ? fmtLog(msg.text) : msg.text }} />
             </div>
           ))}
           {loading && (
@@ -1015,7 +1028,7 @@ function PlayPageInner() {
           {[4, 6, 8, 10, 12, 20, 100].map(dd => {
             const isReq = pendRoll?.dice === dd
             return (
-              <button key={dd} onClick={() => rDie(dd)} disabled={!isReq} style={{ flex: 1, fontFamily: "'Cinzel', serif", fontSize: '10px', padding: '7px 2px', background: '#1e1912', border: `1px solid ${isReq ? '#c9952a' : '#3a3020'}`, color: isReq ? '#c9952a' : '#3a3020', cursor: isReq ? 'pointer' : 'not-allowed', borderRadius: '2px', fontWeight: isReq ? 600 : 400 }}>
+              <button key={dd} onClick={() => rDie(dd)} disabled={!isReq} style={{ flex: 1, fontFamily: "'Cinzel', serif", fontSize: '10px', padding: '7px 2px', background: '#1e1912', border: `1px solid ${isReq ? '#c9952a' : '#3a3020'}`, color: isReq ? '#c9952a' : '#3a3020', cursor: isReq ? 'pointer' : 'not-allowed', borderRadius: '2px', fontWeight: isReq ? 600 : 400, animation: isReq ? 'diceGlow 1.1s ease-in-out infinite' : 'none' }}>
                 {dd === 100 ? 'd%' : `d${dd}`}
               </button>
             )
@@ -1130,6 +1143,7 @@ function PlayPageInner() {
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes pulse { 0%, 60%, 100% { opacity: 0.2; } 30% { opacity: 1; } }
+        @keyframes diceGlow { 0%, 100% { box-shadow: 0 0 0 1px rgba(201,149,42,0.25); } 50% { box-shadow: 0 0 10px 2px rgba(201,149,42,0.9); } }
       `}</style>
     </div>
   )

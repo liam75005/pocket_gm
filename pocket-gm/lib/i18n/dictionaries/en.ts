@@ -134,6 +134,7 @@ export const en = {
       engaged: '⚔ ⚔ ⚔  COMBAT ENGAGED  ⚔ ⚔ ⚔', order: '📋 Initiative order: {order}',
       playerFirst: '▶ YOU ACT FIRST — Describe your action', allyFirst: '🤝 {name} (ally) acts first', enemyFirst: '⏳ {name} acts first',
       ended: '✓ COMBAT ENDED', deathSaveRequired: '⚠ Death save required (0 HP)',
+      roundBegins: '─── ROUND {round} BEGINS ───',
       yourTurn: '▶ [Round {round}] YOUR TURN — Describe your action', turnOf: '⏳ {name}\'s turn{ally}', allySuffix: ' (ally)',
       enemyDied: '☠ {name} has died', allyDowned: '🩸 {name} falls unconscious (0 HP, making death saves)',
       allyStabilized: '💤 {name} is stabilized (unconscious but out of danger)', allyRevived: '✨ {name} comes back around',

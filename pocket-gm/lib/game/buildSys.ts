@@ -32,7 +32,7 @@ const HEADERS: Record<Lang, Record<string, string>> = {
     currentState: 'CURRENT CHARACTER STATE (updated every turn)', conditions: 'Conditions', none: 'none', inventory: 'Inventory', purse: 'Purse',
     activeCombat: 'ACTIVE COMBAT', round: 'Round', currentTurnLabel: 'Current turn', player: 'PLAYER', enemy: 'ENEMY', order: 'Order',
     sessionNotes: 'Session notes (resources used, etc.):', gp: 'gp',
-    actionEconomy: 'Action economy (player, this round)', action: 'Action', bonusAction: 'Bonus action', movement: 'Movement', used: 'used', available: 'available',
+    actionEconomy: 'Action economy (player, this round)', action: 'Action', bonusAction: 'Bonus action', movement: 'Movement', reaction: 'Reaction', used: 'used', available: 'available',
   },
   fr: {
     sheet: 'FICHE DE PERSONNAGE', name: 'Nom', pronouns: 'Pronoms', species: 'Espèce', class: 'Classe', level: 'Niveau', background: 'Historique',
@@ -45,7 +45,7 @@ const HEADERS: Record<Lang, Record<string, string>> = {
     currentState: 'ÉTAT COURANT DU PERSONNAGE (mis à jour à chaque tour)', conditions: 'Conditions', none: 'aucune', inventory: 'Inventaire', purse: 'Bourse',
     activeCombat: 'COMBAT ACTIF', round: 'Round', currentTurnLabel: 'Tour actuel', player: 'JOUEUR', enemy: 'ENNEMI', order: 'Ordre',
     sessionNotes: 'Notes de session (ressources utilisées, etc.) :', gp: 'po',
-    actionEconomy: 'Économie d\'actions (joueur, ce round)', action: 'Action', bonusAction: 'Action bonus', movement: 'Déplacement', used: 'utilisée', available: 'disponible',
+    actionEconomy: 'Économie d\'actions (joueur, ce round)', action: 'Action', bonusAction: 'Action bonus', movement: 'Déplacement', reaction: 'Réaction', used: 'utilisée', available: 'disponible',
   },
 }
 
@@ -158,7 +158,7 @@ function formatDynamicState(state: DynamicStateForAPI, character: Character, lan
     lines.push(`${h.order}: ${state.initiative.filter(t => t.alive).map(t => `${t.name}(${t.init})`).join(' > ')}`)
     if (state.roundActions) {
       const ra = state.roundActions
-      lines.push(`${h.actionEconomy}: ${h.action}=${ra.actionUsed ? h.used : h.available} | ${h.bonusAction}=${ra.bonusActionUsed ? h.used : h.available} | ${h.movement}=${ra.movementUsed}/${character.speed} ${h.ft}`)
+      lines.push(`${h.actionEconomy}: ${h.action}=${ra.actionUsed ? h.used : h.available} | ${h.bonusAction}=${ra.bonusActionUsed ? h.used : h.available} | ${h.movement}=${ra.movementUsed}/${character.speed} ${h.ft} | ${h.reaction}=${ra.reactionUsed ? h.used : h.available}`)
     }
   }
 

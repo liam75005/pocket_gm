@@ -134,6 +134,7 @@ export const fr = {
       engaged: '⚔ ⚔ ⚔  COMBAT ENGAGÉ  ⚔ ⚔ ⚔', order: '📋 Ordre d\'initiative : {order}',
       playerFirst: '▶ VOUS AGISSEZ EN PREMIER — Décrivez votre action', allyFirst: '🤝 {name} (allié) agit en premier', enemyFirst: '⏳ {name} agit en premier',
       ended: '✓ COMBAT TERMINÉ', deathSaveRequired: '⚠ Jet de mort requis (0 PV)',
+      roundBegins: '─── LE ROUND {round} COMMENCE ───',
       yourTurn: '▶ [Round {round}] VOTRE TOUR — Décrivez votre action', turnOf: '⏳ Tour de {name}{ally}', allySuffix: ' (allié)',
       enemyDied: '☠ {name} est mort', allyDowned: '🩸 {name} tombe inconscient (0 PV, jets de mort en cours)',
       allyStabilized: '💤 {name} est stabilisé (inconscient mais hors danger)', allyRevived: '✨ {name} revient à lui',

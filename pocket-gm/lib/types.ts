@@ -56,6 +56,7 @@ export interface RoundActions {
   actionUsed: boolean
   bonusActionUsed: boolean
   movementUsed: number  // feet used this round
+  reactionUsed: boolean
 }
 
 export interface GameState {
